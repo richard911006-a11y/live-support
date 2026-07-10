@@ -1,0 +1,32 @@
+{
+  "name": "live-support",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A lightweight realtime customer support platform built for the Cloudflare ecosystem.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@11.10.0",
+  "engines": {
+    "node": ">=20.19.0",
+    "pnpm": ">=11.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "check": "eslint . --max-warnings 0 && turbo run typecheck && turbo run test && prettier --check .",
+    "dev": "turbo run dev --parallel",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings 0",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.6.0",
+    "prettier": "3.9.4",
+    "turbo": "2.10.4",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.63.0",
+    "vitest": "4.1.10"
+  }
+}

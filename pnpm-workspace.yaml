@@ -1,0 +1,12 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+catalog:
+  hono: 4.12.28
+  wrangler: 4.107.1
+
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true

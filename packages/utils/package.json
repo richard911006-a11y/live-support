@@ -1,0 +1,7 @@
+{
+  "name": "@live-support/utils",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Reusable utilities placeholder for a future phase.",
+  "type": "module"
+}

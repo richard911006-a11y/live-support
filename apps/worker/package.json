@@ -1,0 +1,13 @@
+{
+  "name": "@live-support/worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Cloudflare Worker application placeholder for a future phase.",
+  "type": "module",
+  "dependencies": {
+    "hono": "catalog:"
+  },
+  "devDependencies": {
+    "wrangler": "catalog:"
+  }
+}
