@@ -1,0 +1,15 @@
+{
+  "$schema": "../worker/node_modules/wrangler/config-schema.json",
+  "name": "live-support-widget",
+  "pages_build_output_dir": "public",
+  "compatibility_date": "2026-07-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "env": {
+    "preview": {
+      "name": "live-support-widget-preview",
+    },
+    "production": {
+      "name": "live-support-widget",
+    },
+  },
+}

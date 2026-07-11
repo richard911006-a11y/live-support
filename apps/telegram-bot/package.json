@@ -1,7 +1,7 @@
 {
   "name": "@live-support/telegram-bot",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "Telegram customer service application placeholder for a future phase.",
+  "description": "Reserved package for future Telegram operator tooling; Worker integration is active.",
   "type": "module"
 }

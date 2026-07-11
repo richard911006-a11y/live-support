@@ -18,6 +18,9 @@
     },
     "typecheck": {
       "dependsOn": ["^typecheck"]
+    },
+    "deploy": {
+      "cache": false
     }
   }
 }

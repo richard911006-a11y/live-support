@@ -1,13 +1,25 @@
 {
   "name": "@live-support/worker",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "Cloudflare Worker application placeholder for a future phase.",
+  "description": "Cloudflare Worker backend for live-support.",
   "type": "module",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --env production --outdir dist",
+    "dev": "wrangler dev --env development",
+    "deploy": "wrangler deploy --env production && node ../../scripts/register-telegram-webhook.mjs",
+    "test": "vitest run",
+    "typecheck": "wrangler types --env-interface CloudflareBindings && tsc --noEmit --project tsconfig.json",
+    "types": "wrangler types --env-interface CloudflareBindings"
+  },
   "dependencies": {
+    "@live-support/types": "workspace:*",
+    "@live-support/utils": "workspace:*",
     "hono": "catalog:"
   },
   "devDependencies": {
+    "typescript": "6.0.3",
+    "vitest": "4.1.10",
     "wrangler": "catalog:"
   }
 }

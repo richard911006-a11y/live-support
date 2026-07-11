@@ -1,6 +1,6 @@
 {
   "name": "live-support",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "A lightweight realtime customer support platform built for the Cloudflare ecosystem.",
   "license": "MIT",
@@ -18,7 +18,9 @@
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
     "test": "turbo run test",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "deploy": "turbo run deploy --filter=@live-support/worker",
+    "deploy:pages": "pnpm --filter @live-support/widget pages:deploy"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

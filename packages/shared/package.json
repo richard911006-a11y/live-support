@@ -1,7 +1,7 @@
 {
   "name": "@live-support/shared",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "Shared project primitives placeholder for a future phase.",
+  "description": "Shared project primitives reserved for cross-application contracts.",
   "type": "module"
 }

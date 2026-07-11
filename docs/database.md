@@ -1,5 +1,3 @@
 # Database
 
-This document will describe the data model and persistence strategy.
-
-> Future content will be added in a later phase.
+The MVP deliberately does not persist chat history or session state. Durable Object state is in memory only; KV stores configuration JSON and R2 stores image objects. D1 is reserved for a future persistence phase.
