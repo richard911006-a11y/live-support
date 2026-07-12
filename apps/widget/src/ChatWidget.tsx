@@ -212,6 +212,10 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
   }, [messages, isOpen]);
 
   function sendMessage(): void {
+    console.log('[UI Debug] sendMessage', {
+      draft,
+      status,
+    });
     const content = draft.trim();
 
     if (content.length === 0 || status !== 'connected') {
@@ -222,7 +226,11 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
     setMessages((currentMessages) => [...currentMessages, localMessage]);
     setDraft('');
 
-    if (!client.sendMessage(content)) {
+    console.log('[UI Debug] before client.sendMessage', content);
+    const result = client.sendMessage(content);
+    console.log('[UI Debug] client.sendMessage returned', result);
+
+    if (!result) {
       setMessages((currentMessages) =>
         currentMessages.filter((currentMessage) => currentMessage.id !== localMessage.id),
       );
@@ -230,6 +238,7 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+    console.log('[UI Debug] handleSubmit');
     event.preventDefault();
     sendMessage();
   }

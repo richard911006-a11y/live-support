@@ -162,6 +162,7 @@ export class WebSocketClient {
   }
 
   public sendMessage(content: string): boolean {
+    console.log('[WS Debug] sendMessage', content);
     if (content.length === 0 || this.socket?.readyState !== SOCKET_OPEN) {
       return false;
     }
@@ -270,6 +271,7 @@ export class WebSocketClient {
     }
 
     try {
+      console.log('[WS Debug] websocket.send', message);
       this.socket.send(serializeProtocolMessage(message));
       return true;
     } catch {
