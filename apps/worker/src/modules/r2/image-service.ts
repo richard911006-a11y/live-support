@@ -44,15 +44,15 @@ export class ImageService {
     const contentType = file.type.toLowerCase();
 
     if (file.size === 0) {
-      throw new ImageUploadError('Image file is empty.', 'invalid_file');
+      throw new ImageUploadError('图片文件为空。', 'invalid_file');
     }
 
     if (file.size > IMAGE_MAX_SIZE_BYTES) {
-      throw new ImageUploadError('Image exceeds the 10 MB size limit.', 'file_too_large');
+      throw new ImageUploadError('图片大小超过 10 MB 限制。', 'file_too_large');
     }
 
     if (!SUPPORTED_IMAGE_MIME_TYPES.includes(contentType as SupportedImageMimeType)) {
-      throw new ImageUploadError('Unsupported image type.', 'unsupported_type');
+      throw new ImageUploadError('不支持的图片格式。', 'unsupported_type');
     }
 
     const supportedContentType = contentType as SupportedImageMimeType;
@@ -75,7 +75,7 @@ export class ImageService {
     }
 
     if (!uploaded) {
-      throw new ImageUploadError('Image upload failed.', 'upload_failed', lastError);
+      throw new ImageUploadError('图片上传失败。', 'upload_failed', lastError);
     }
 
     return {

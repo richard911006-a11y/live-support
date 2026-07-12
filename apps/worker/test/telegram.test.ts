@@ -23,15 +23,15 @@ describe('Telegram integration', () => {
     expect(formatCustomerMessage('visitor-123' as VisitorId, 'Hello')).toBe(
       [
         '--------------------------------',
-        '🌐 Website',
+        '网站',
         '',
         'live-support',
         '',
-        '👤 Visitor',
+        '访客',
         '',
         'visitor-123',
         '',
-        '💬 Message',
+        '访客消息',
         '',
         'Hello',
         '--------------------------------',

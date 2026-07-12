@@ -131,7 +131,7 @@ export class WebSocketClient {
       socket.addEventListener('error', () => this.handleSocketError(socket));
       socket.addEventListener('close', () => this.handleClose(socket));
     } catch {
-      this.emit(connectionError('Unable to create a WebSocket connection.'));
+      this.emit(connectionError('无法创建 WebSocket 连接。'));
       this.setStatus('reconnecting');
       this.scheduleReconnect();
     }
@@ -162,7 +162,6 @@ export class WebSocketClient {
   }
 
   public sendMessage(content: string): boolean {
-    console.log('[WS Debug] sendMessage', content);
     if (content.length === 0 || this.socket?.readyState !== SOCKET_OPEN) {
       return false;
     }
@@ -208,7 +207,7 @@ export class WebSocketClient {
       this.emit({
         type: 'error',
         code: 'invalid_server_message',
-        message: 'The server sent an invalid JSON protocol message.',
+        message: '服务器返回了无效的 JSON 协议消息。',
         retryable: false,
       });
       return;
@@ -237,7 +236,7 @@ export class WebSocketClient {
       return;
     }
 
-    this.emit(connectionError('The WebSocket connection reported an error.'));
+    this.emit(connectionError('WebSocket 连接发生错误。'));
 
     if (this.shouldReconnect) {
       this.setStatus('reconnecting');
@@ -271,11 +270,10 @@ export class WebSocketClient {
     }
 
     try {
-      console.log('[WS Debug] websocket.send', message);
       this.socket.send(serializeProtocolMessage(message));
       return true;
     } catch {
-      this.emit(connectionError('The WebSocket message could not be sent.'));
+      this.emit(connectionError('无法发送 WebSocket 消息。'));
       return false;
     }
   }

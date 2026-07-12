@@ -1,3 +1,5 @@
-# Database
+# 数据与存储
 
-The MVP deliberately does not persist chat history or session state. Durable Object state is in memory only; KV stores configuration JSON and R2 stores image objects. D1 is reserved for a future persistence phase.
+本文说明 MVP 阶段的状态和对象存储策略。
+
+当前版本不持久化聊天记录或会话状态。Durable Object 会话状态仅保存在运行时内存中；KV 保存 JSON 格式的配置，R2 保存图片对象。D1 预留给未来的持久化阶段。

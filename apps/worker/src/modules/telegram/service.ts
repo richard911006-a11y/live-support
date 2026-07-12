@@ -35,7 +35,7 @@ export function formatCustomerMessage(
     return [
       ...formatVisitorInfo(visitorInfo),
       '',
-      '💬 Message',
+      '访客消息',
       '',
       message,
       '--------------------------------',
@@ -44,15 +44,15 @@ export function formatCustomerMessage(
 
   return [
     '--------------------------------',
-    '🌐 Website',
+    '网站',
     '',
     'live-support',
     '',
-    '👤 Visitor',
+    '访客',
     '',
     visitorId,
     '',
-    '💬 Message',
+    '访客消息',
     '',
     message,
     '--------------------------------',
@@ -68,26 +68,26 @@ export function formatCustomerImageCaption(
     return [
       ...formatVisitorInfo(visitorInfo),
       '',
-      '🖼️ Image',
+      '图片',
       '',
-      caption ?? 'Customer image',
+      caption ?? '访客图片',
       '--------------------------------',
     ].join('\n');
   }
 
   return [
     '--------------------------------',
-    '🌐 Website',
+    '网站',
     '',
     'live-support',
     '',
-    '👤 Visitor',
+    '访客',
     '',
     visitorId,
     '',
-    '🖼️ Image',
+    '图片',
     '',
-    caption ?? 'Customer image',
+    caption ?? '访客图片',
     '--------------------------------',
   ].join('\n');
 }
@@ -106,12 +106,6 @@ export class TelegramService {
     this.logger = options.logger ?? defaultLogger;
     this.adminChatIds = parseAdminChatIds(env.TELEGRAM_ADMIN_CHAT_IDS);
     this.enabled = botToken.length > 0 && this.adminChatIds.length > 0;
-    console.log('[Telegram Debug]', {
-      event: 'service_initialized',
-      enabled: this.enabled,
-      adminChatIdCount: this.adminChatIds.length,
-      adminChatIds: this.adminChatIds,
-    });
   }
 
   public sendMessage(chatId: TelegramChatId, text: string) {
@@ -131,19 +125,7 @@ export class TelegramService {
     message: string,
     visitorInfo?: VisitorInfo,
   ): Promise<void> {
-    console.log('[Telegram Debug]', {
-      event: 'notify_customer_message_started',
-      visitorId,
-      messagePreview: message.slice(0, 80),
-      destinationAdminChatIds: this.adminChatIds,
-    });
-
     if (!this.enabled) {
-      console.log('[Telegram Debug]', {
-        event: 'notify_customer_message_skipped',
-        reason: 'telegram_service_disabled',
-        visitorId,
-      });
       return;
     }
 
@@ -154,12 +136,6 @@ export class TelegramService {
     const failures = deliveries.filter(
       (delivery): delivery is PromiseRejectedResult => delivery.status === 'rejected',
     );
-    console.log('[Telegram Debug]', {
-      event: 'customer_message_delivery_settled',
-      fulfilledCount: deliveries.length - failures.length,
-      rejectedCount: failures.length,
-      rejectionReasons: failures.map((failure) => failure.reason),
-    });
 
     if (failures.length > 0) {
       this.logger.error(
@@ -186,12 +162,6 @@ export class TelegramService {
     const failures = deliveries.filter(
       (delivery): delivery is PromiseRejectedResult => delivery.status === 'rejected',
     );
-    console.log('[Telegram Debug]', {
-      event: 'customer_image_delivery_settled',
-      fulfilledCount: deliveries.length - failures.length,
-      rejectedCount: failures.length,
-      rejectionReasons: failures.map((failure) => failure.reason),
-    });
 
     if (failures.length > 0) {
       this.logger.error(
@@ -223,35 +193,35 @@ function formatVisitorInfo(info: VisitorInfo): string[] {
 
   return [
     '━━━━━━━━━━━━━━━━━━━━',
-    '🌐 Website',
-    info.website ?? 'Unknown',
+    '网站',
+    info.website ?? '未知',
     '',
-    '👤 Visitor',
+    '访客',
     info.visitorId,
     '',
-    '📍 Location',
-    location || 'Unknown',
+    '所在地区',
+    location || '未知',
     '',
-    '🕒 Timezone',
-    info.timezone ?? 'Unknown',
+    '时区',
+    info.timezone ?? '未知',
     '',
-    '⏱️ Connection Time',
+    '连接时间',
     formatConnectionTime(info.connectionTime),
     '',
-    '🌎 Language',
-    info.language ?? 'Unknown',
+    '浏览器语言',
+    info.language ?? '未知',
     '',
-    '💻 Device',
-    [info.deviceType, info.operatingSystem].filter(Boolean).join(' · ') || 'Unknown',
+    '设备',
+    [info.deviceType, info.operatingSystem].filter(Boolean).join(' · ') || '未知',
     '',
-    '🌐 Browser',
-    info.browser ?? 'Unknown',
+    '浏览器',
+    info.browser ?? '未知',
     '',
-    '📡 Network',
-    network || 'Unknown',
+    '网络运营商',
+    network || '未知',
     '',
-    '🧾 User Agent',
-    info.userAgent ?? 'Unknown',
+    '用户代理',
+    info.userAgent ?? '未知',
     '━━━━━━━━━━━━━━━━━━━━',
   ];
 }
@@ -260,7 +230,7 @@ function formatConnectionTime(timestamp: number): string {
   try {
     return new Date(timestamp).toISOString();
   } catch {
-    return 'Unknown';
+    return '未知';
   }
 }
 

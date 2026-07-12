@@ -15,5 +15,5 @@ app.route('/', websocketRoutes);
 app.route('/', telegramRoutes);
 app.route('/', imageRoutes);
 
-app.notFound(() => error('Route not found', 404));
+app.notFound(() => error('未找到请求的路由。', 404));
 app.onError((cause) => handleUnhandledError(cause));

@@ -38,16 +38,16 @@ export interface ChatWidgetProps {
 }
 
 const STATUS_LABELS: Record<ConnectionStatus, string> = {
-  connecting: 'Connecting...',
-  connected: 'Connected',
-  disconnected: 'Disconnected',
-  reconnecting: 'Reconnecting...',
+  connecting: '正在连接…',
+  connected: '已连接',
+  disconnected: '已断开',
+  reconnecting: '正在重新连接…',
 };
 
 const DELIVERY_LABELS: Record<DeliveryStatus, string> = {
-  sending: 'Sending',
-  sent: 'Sent',
-  read: 'Read',
+  sending: '发送中',
+  sent: '已发送',
+  read: '已读',
 };
 
 function createLocalMessage(content: string): ChatMessage {
@@ -80,7 +80,7 @@ function formatTimestamp(timestamp: number): string {
   }).format(timestamp);
 }
 
-export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetProps): JSX.Element {
+export function ChatWidget({ connection, title = '在线客服' }: ChatWidgetProps): JSX.Element {
   const clientRef = useRef<WebSocketClient | null>(null);
   const endOfMessagesRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -212,10 +212,6 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
   }, [messages, isOpen]);
 
   function sendMessage(): void {
-    console.log('[UI Debug] sendMessage', {
-      draft,
-      status,
-    });
     const content = draft.trim();
 
     if (content.length === 0 || status !== 'connected') {
@@ -226,11 +222,7 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
     setMessages((currentMessages) => [...currentMessages, localMessage]);
     setDraft('');
 
-    console.log('[UI Debug] before client.sendMessage', content);
-    const result = client.sendMessage(content);
-    console.log('[UI Debug] client.sendMessage returned', result);
-
-    if (!result) {
+    if (!client.sendMessage(content)) {
       setMessages((currentMessages) =>
         currentMessages.filter((currentMessage) => currentMessage.id !== localMessage.id),
       );
@@ -238,7 +230,6 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
-    console.log('[UI Debug] handleSubmit');
     event.preventDefault();
     sendMessage();
   }
@@ -282,7 +273,7 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
         );
       }
     } catch (cause) {
-      setUploadError(cause instanceof Error ? cause.message : 'Image upload failed.');
+      setUploadError(cause instanceof Error ? cause.message : '图片上传失败。');
     } finally {
       setIsUploading(false);
     }
@@ -293,7 +284,7 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
   return (
     <div className="live-support-widget">
       {isOpen ? (
-        <section className="live-support-window" aria-label="Customer support chat">
+        <section className="live-support-window" aria-label="客服聊天窗口">
           <header className="live-support-header">
             <div>
               <h2>{title}</h2>
@@ -305,18 +296,16 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
             <button
               className="live-support-close"
               type="button"
-              aria-label="Close support chat"
+              aria-label="关闭客服聊天"
               onClick={() => setIsOpen(false)}
             >
               ×
             </button>
           </header>
 
-          <div className="live-support-messages" aria-live="polite" aria-label="Chat messages">
+          <div className="live-support-messages" aria-live="polite" aria-label="聊天消息">
             {messages.length === 0 ? (
-              <p className="live-support-empty">
-                Send a message and our team will be right with you.
-              </p>
+              <p className="live-support-empty">发送消息后，客服会尽快回复您。</p>
             ) : (
               messages.map((message) => (
                 <article
@@ -327,7 +316,7 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
                     <img
                       className="live-support-image"
                       src={message.imageUrl}
-                      alt={message.content || 'Shared image'}
+                      alt={message.content || '共享图片'}
                       loading="lazy"
                     />
                   ) : null}
@@ -358,20 +347,20 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
                 onChange={handleImageSelected}
               />
               <button
-                aria-label="Send image"
+                aria-label="发送图片"
                 className="live-support-attach"
                 disabled={!isConnected || isUploading}
                 type="button"
                 onClick={() => imageInputRef.current?.click()}
               >
-                {isUploading ? 'Uploading...' : 'Image'}
+                {isUploading ? '上传中…' : '图片'}
               </button>
               <textarea
-                aria-label="Message"
+                aria-label="消息"
                 disabled={!isConnected || isUploading}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={handleComposerKeyDown}
-                placeholder={isConnected ? 'Write a message...' : STATUS_LABELS[status]}
+                placeholder={isConnected ? '请输入消息…' : STATUS_LABELS[status]}
                 rows={2}
                 value={draft}
               />
@@ -379,10 +368,10 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
                 disabled={!isConnected || isUploading || draft.trim().length === 0}
                 type="submit"
               >
-                Send
+                发送
               </button>
             </div>
-            {isUploading ? <p className="live-support-upload-status">Uploading image...</p> : null}
+            {isUploading ? <p className="live-support-upload-status">正在上传图片…</p> : null}
             {uploadError ? (
               <p className="live-support-upload-error" role="alert">
                 {uploadError}
@@ -396,10 +385,10 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
         className="live-support-launcher"
         type="button"
         aria-expanded={isOpen}
-        aria-label={isOpen ? 'Close support chat' : 'Open support chat'}
+        aria-label={isOpen ? '关闭客服聊天' : '打开客服聊天'}
         onClick={() => setIsOpen((open) => !open)}
       >
-        {isOpen ? 'Close' : 'Chat with us'}
+        {isOpen ? '关闭' : '联系客服'}
       </button>
     </div>
   );

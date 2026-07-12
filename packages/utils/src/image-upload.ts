@@ -43,15 +43,15 @@ export async function uploadImage(
   const contentType = file.type.toLowerCase();
 
   if (file.size === 0) {
-    throw new ImageUploadError('Image file is empty.', 'invalid_file');
+    throw new ImageUploadError('图片文件为空。', 'invalid_file');
   }
 
   if (!isSupportedImageType(contentType)) {
-    throw new ImageUploadError('Unsupported image type.', 'unsupported_type');
+    throw new ImageUploadError('不支持的图片格式。', 'unsupported_type');
   }
 
   if (file.size > IMAGE_MAX_SIZE_BYTES) {
-    throw new ImageUploadError('Image exceeds the 10 MB size limit.', 'file_too_large');
+    throw new ImageUploadError('图片大小超过 10 MB 限制。', 'file_too_large');
   }
 
   const form = new FormData();
@@ -71,7 +71,7 @@ export async function uploadImage(
       const payload = (await response.json()) as ImageUploadResponse;
 
       if (!response.ok || payload.image === undefined) {
-        throw new ImageUploadError('Image upload failed.', 'upload_failed');
+        throw new ImageUploadError('图片上传失败。', 'upload_failed');
       }
 
       return payload.image;
@@ -86,5 +86,5 @@ export async function uploadImage(
 
   throw lastError instanceof ImageUploadError
     ? lastError
-    : new ImageUploadError('Image upload failed after retrying.', 'upload_failed', lastError);
+    : new ImageUploadError('图片重试上传后仍然失败。', 'upload_failed', lastError);
 }

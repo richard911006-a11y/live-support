@@ -17,11 +17,11 @@ export const websocketRoutes = new Hono<{ Bindings: Env }>().get('/ws', async (c
   const request = context.req.raw;
 
   if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
-    return error('WebSocket upgrade required', 426);
+    return error('需要升级为 WebSocket 连接。', 426);
   }
 
   if (!connectionLimiter.consume(getClientRateLimitKey(request))) {
-    return error('Too many connection attempts. Please try again shortly.', 429);
+    return error('连接尝试过于频繁，请稍后再试。', 429);
   }
 
   const url = new URL(request.url);
@@ -29,7 +29,7 @@ export const websocketRoutes = new Hono<{ Bindings: Env }>().get('/ws', async (c
   const suppliedVisitorId = url.searchParams.get('visitorId');
 
   if (suppliedToken === null && suppliedVisitorId !== null) {
-    return error('A server-issued session token is required.', 401);
+    return error('需要服务器签发的会话令牌。', 401);
   }
 
   const visitorId =
@@ -38,7 +38,7 @@ export const websocketRoutes = new Hono<{ Bindings: Env }>().get('/ws', async (c
       : await verifySessionToken(suppliedToken, context.env.TELEGRAM_WEBHOOK_SECRET);
 
   if (suppliedToken !== null && visitorId === undefined) {
-    return error('Invalid or expired session token.', 401);
+    return error('会话令牌无效或已过期。', 401);
   }
 
   const identity =

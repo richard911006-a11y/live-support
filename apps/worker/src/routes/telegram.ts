@@ -18,7 +18,7 @@ import { logger } from '../utils/logger';
 import type { Env } from '../types/env';
 
 const TELEGRAM_SECRET_HEADER = 'X-Telegram-Bot-Api-Secret-Token';
-const VISITOR_METADATA_PATTERN = /(?:👤\s*)?Visitor\s*\r?\n\s*([^\r\n]+)/u;
+const VISITOR_METADATA_PATTERN = /(?:👤\s*)?(?:Visitor|访客)\s*\r?\n\s*([^\r\n]+)/u;
 
 export const telegramRoutes = new Hono<{ Bindings: Env }>()
   .post('/telegram/webhook', handleWebhook)
@@ -28,7 +28,7 @@ async function handleWebhook(context: Context<{ Bindings: Env }>): Promise<Respo
   const providedSecret = context.req.header(TELEGRAM_SECRET_HEADER);
 
   if (!secretsMatch(context.env.TELEGRAM_WEBHOOK_SECRET, providedSecret ?? null)) {
-    return error('Invalid Telegram webhook secret', 401);
+    return error('Telegram Webhook 密钥无效。', 401);
   }
 
   try {
@@ -97,11 +97,11 @@ async function handleWebhook(context: Context<{ Bindings: Env }>): Promise<Respo
       );
     } catch (cause) {
       logger.error('Telegram image reply processing failed', cause);
-      return error('Telegram image reply processing failed', 503);
+      return error('Telegram 图片回复处理失败。', 503);
     }
   } catch (cause) {
     logger.error('Telegram webhook processing failed', cause);
-    return error('Telegram webhook processing failed', 503);
+    return error('Telegram Webhook 处理失败。', 503);
   }
 }
 
@@ -132,7 +132,7 @@ async function forwardReply(
 
     if (!response.ok) {
       logger.warn('Telegram reply could not reach the ChatRoom', { status: response.status });
-      return error('Telegram reply delivery is temporarily unavailable.', 503);
+      return error('Telegram 回复暂时无法送达。', 503);
     }
 
     const result = (await response.json()) as { delivered?: unknown };
@@ -140,7 +140,7 @@ async function forwardReply(
     return success({ ok: true, read: true, delivered: result.delivered === true });
   } catch (cause) {
     logger.error('Telegram reply forwarding failed', cause);
-    return error('Telegram reply delivery failed.', 503);
+    return error('Telegram 回复发送失败。', 503);
   }
 }
 

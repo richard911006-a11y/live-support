@@ -52,14 +52,14 @@ export class ChatRoom extends DurableObject<Env> {
     }
 
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
-      return error('WebSocket upgrade required', 426);
+      return error('需要升级为 WebSocket 连接。', 426);
     }
 
     const visitorIdValue = request.headers.get(VISITOR_ID_HEADER);
     const sessionToken = request.headers.get(SESSION_TOKEN_HEADER);
 
     if (visitorIdValue === null || sessionToken === null) {
-      return error('visitorId is required', 400);
+      return error('缺少访客标识。', 400);
     }
 
     const verifiedVisitorId = await verifySessionToken(
@@ -68,7 +68,7 @@ export class ChatRoom extends DurableObject<Env> {
     );
 
     if (verifiedVisitorId === undefined || verifiedVisitorId !== visitorIdValue) {
-      return error('Invalid session token', 401);
+      return error('会话令牌无效。', 401);
     }
 
     const pair = new WebSocketPair();
@@ -89,31 +89,6 @@ export class ChatRoom extends DurableObject<Env> {
       this.closeSocket(server, 1011, 'Socket error');
     });
     server.addEventListener('message', (message) => {
-      const rawMessage = typeof message.data === 'string' ? message.data : undefined;
-      let messageType = 'unknown';
-
-      if (rawMessage !== undefined) {
-        try {
-          const parsed: unknown = JSON.parse(rawMessage);
-          if (
-            typeof parsed === 'object' &&
-            parsed !== null &&
-            'type' in parsed &&
-            typeof parsed.type === 'string'
-          ) {
-            messageType = parsed.type;
-          }
-        } catch {
-          messageType = 'invalid_json';
-        }
-      }
-
-      console.log('[WebSocket Debug]', {
-        event: 'client_message_received',
-        messageType,
-        visitorId: session.visitorId,
-        messageLength: rawMessage?.length ?? null,
-      });
       this.ctx.waitUntil(this.onMessage(session.sessionId, server, message));
     });
 
@@ -156,7 +131,7 @@ export class ChatRoom extends DurableObject<Env> {
     const clientMessage = parseClientMessage(message.data);
 
     if (clientMessage === undefined) {
-      this.sendError(session, 'invalid_message', 'Messages must be valid JSON protocol messages.');
+      this.sendError(session, 'invalid_message', '消息必须是有效的 JSON 协议格式。');
       return;
     }
 
@@ -164,7 +139,7 @@ export class ChatRoom extends DurableObject<Env> {
       await this.handleClientMessage(session, clientMessage);
     } catch (cause) {
       logger.error('Unhandled WebSocket message exception', cause);
-      this.sendError(session, 'internal_error', 'Unable to process the message.');
+      this.sendError(session, 'internal_error', '无法处理该消息。');
     }
   }
 
@@ -216,7 +191,7 @@ export class ChatRoom extends DurableObject<Env> {
     switch (message.type) {
       case 'connect':
         if (message.visitorId !== undefined && message.visitorId !== session.visitorId) {
-          this.sendError(session, 'visitor_mismatch', 'The visitorId does not match this session.');
+          this.sendError(session, 'visitor_mismatch', '访客标识与当前会话不匹配。');
           return;
         }
 
@@ -234,35 +209,12 @@ export class ChatRoom extends DurableObject<Env> {
         this.send(session, { type: 'pong', timestamp: session.lastHeartbeat });
         return;
       case 'message': {
-        console.log('[ChatRoom Debug]', {
-          event: 'message_processing_started',
-          visitorId: session.visitorId,
-          messageLength: message.content.length,
-        });
-
-        const rateLimited = !this.messageLimiter.consume(session.sessionId);
-        console.log('[ChatRoom Debug]', {
-          event: 'message_rate_limit_check',
-          visitorId: session.visitorId,
-          rateLimited,
-        });
-
-        if (rateLimited) {
-          this.sendError(
-            session,
-            'rate_limited',
-            'Too many messages. Please try again shortly.',
-            true,
-          );
+        if (!this.messageLimiter.consume(session.sessionId)) {
+          this.sendError(session, 'rate_limited', '消息发送过于频繁，请稍后再试。', true);
           return;
         }
 
         const autoReply = await this.autoReplyService.matchKeyword(message.content);
-        console.log('[ChatRoom Debug]', {
-          event: 'auto_reply_check',
-          visitorId: session.visitorId,
-          matched: autoReply !== undefined,
-        });
         const serverMessage: ServerMessage = {
           type: 'message',
           messageId: crypto.randomUUID() as MessageId,
@@ -275,11 +227,6 @@ export class ChatRoom extends DurableObject<Env> {
         this.send(session, { type: 'read', messageId: serverMessage.messageId });
 
         if (autoReply !== undefined) {
-          console.log('[ChatRoom Debug]', {
-            event: 'telegram_notification_skipped',
-            reason: 'auto_reply_match',
-            visitorId: session.visitorId,
-          });
           this.send(session, {
             type: 'message',
             messageId: crypto.randomUUID() as MessageId,
@@ -292,11 +239,6 @@ export class ChatRoom extends DurableObject<Env> {
 
         const includeVisitorInfo = !session.telegramConversationStarted;
         session.telegramConversationStarted = true;
-        console.log('[ChatRoom Debug]', {
-          event: 'telegram_notification_scheduled',
-          visitorId: session.visitorId,
-          messagePreview: message.content.slice(0, 80),
-        });
         this.ctx.waitUntil(
           this.telegramService.notifyCustomerMessage(
             session.visitorId,
@@ -395,7 +337,7 @@ export class ChatRoom extends DurableObject<Env> {
           ) ||
           (payload.caption !== undefined && typeof payload.caption !== 'string')
         ) {
-          return error('Invalid Telegram image reply payload', 400);
+          return error('Telegram 图片回复数据无效。', 400);
         }
 
         return success({
@@ -415,14 +357,14 @@ export class ChatRoom extends DurableObject<Env> {
         typeof payload.content !== 'string' ||
         payload.content.length === 0
       ) {
-        return error('Invalid Telegram reply payload', 400);
+        return error('Telegram 回复数据无效。', 400);
       }
 
       return success({
         delivered: this.sendTelegramReply(payload.visitorId as VisitorId, payload.content),
       });
     } catch {
-      return error('Invalid Telegram reply payload', 400);
+      return error('Telegram 回复数据无效。', 400);
     }
   }
 

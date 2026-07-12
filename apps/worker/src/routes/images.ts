@@ -38,20 +38,20 @@ export const imageRoutes = new Hono<{ Bindings: Env }>()
 async function uploadImage(context: Context<{ Bindings: Env }>): Promise<Response> {
   try {
     if (!uploadLimiter.consume(getClientRateLimitKey(context.req.raw))) {
-      return error('Too many image uploads. Please try again shortly.', 429);
+      return error('图片上传过于频繁，请稍后再试。', 429);
     }
 
     const contentLength = Number(context.req.header('content-length'));
 
     if (Number.isFinite(contentLength) && contentLength > IMAGE_MAX_SIZE_BYTES + 1_048_576) {
-      return error('Image exceeds the 10 MB size limit.', 413);
+      return error('图片大小超过 10 MB 限制。', 413);
     }
 
     const form = await context.req.raw.formData();
     const entry = form.get('file') ?? form.get('image');
 
     if (!(entry instanceof File)) {
-      return error('An image file is required.', 400);
+      return error('请选择图片文件。', 400);
     }
 
     const image = await new ImageService(context.env.CHAT_IMAGES).upload(
@@ -71,15 +71,15 @@ async function uploadImage(context: Context<{ Bindings: Env }>): Promise<Respons
       }
 
       logger.error('R2 image upload failed', cause.cause);
-      return error('Image upload failed', 500);
+      return error('图片上传失败。', 500);
     }
 
     if (cause instanceof TypeError) {
-      return error('Invalid multipart upload.', 400);
+      return error('无效的 multipart 上传请求。', 400);
     }
 
     logger.error('Image upload request failed', cause);
-    return error('Image upload failed', 500);
+    return error('图片上传失败。', 500);
   }
 }
 
@@ -91,17 +91,17 @@ async function getImage(context: Context<{ Bindings: Env }>): Promise<Response> 
     try {
       key = decodeURIComponent(pathname.slice('/images/'.length));
     } catch {
-      return error('Invalid image key.', 400);
+      return error('图片标识无效。', 400);
     }
 
     if (key.length === 0) {
-      return error('Image key is required.', 400);
+      return error('缺少图片标识。', 400);
     }
 
     const object = await context.env.CHAT_IMAGES.get(key);
 
     if (object === null) {
-      return error('Image not found.', 404);
+      return error('未找到图片。', 404);
     }
 
     const headers = new Headers();
@@ -113,6 +113,6 @@ async function getImage(context: Context<{ Bindings: Env }>): Promise<Response> 
     return new Response(object.body, { headers });
   } catch (cause) {
     logger.error('R2 image read failed', cause);
-    return error('Image could not be loaded', 500);
+    return error('无法加载图片。', 500);
   }
 }

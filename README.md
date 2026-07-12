@@ -1,99 +1,81 @@
 # live-support
 
-> A lightweight, realtime customer support platform designed for the Cloudflare ecosystem.
+> 面向 Cloudflare 的轻量级实时在线客服平台，提供可嵌入的 React 聊天窗口和 Telegram 客服工作流。
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![许可证：MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-workspace-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 
-`live-support` is an open source foundation for building customer support experiences with an embeddable web widget, realtime conversations, and Telegram-based service workflows. The project is intentionally optimized for a small operational footprint, edge deployment, and a modular codebase that can grow without coupling product surfaces together.
+## 项目简介
 
-## Project status
+`live-support` 是一个开源的实时客服系统。访客通过嵌入式聊天窗口发送文字或图片，Cloudflare Worker 负责路由和边缘请求，Durable Object 维护浏览器在线期间的临时会话，Telegram Bot 将消息转发给客服人员。项目不保存聊天历史，也不包含认证、后台管理或 AI 功能。
 
-The repository includes the production MVP runtime: a Cloudflare Worker, in-memory Durable Object sessions, WebSocket transport, React widget, Telegram administrator notification/reply flow, R2 image delivery, request metadata collection, and KV keyword auto-replies. D1 persistence, authentication, and a dashboard remain deliberately outside MVP scope.
+## 功能介绍
 
-## Architecture overview
+- React 响应式客服窗口，支持文字、图片、连接状态和自动重连。
+- Durable Object + WebSocket 实时传输，多访客并发，断开后清理内存会话。
+- Telegram 多管理员通知及 Reply 回复转发。
+- R2 图片对象存储，支持 JPEG、PNG、GIF、WebP，单文件最大 10 MB。
+- KV 精确关键词自动回复，配置缓存 60 秒。
+- 使用 `request.cf` 收集可用的访客地区和设备信息，并在新会话通知中展示。
 
-The planned architecture separates deployable applications from reusable packages:
+## 技术架构
 
 ```text
-Customer browser                           Support team
-       |                                       |
-Embeddable widget                        Telegram bot
-       |                                       |
-       +---------- Cloudflare Worker ----------+
-                          |
-                  Durable Objects
-                  (realtime sessions)
-                     /          \
-                   KV            R2
-             (configuration) (image objects)
+访客浏览器 ── WebSocket/HTTP ── Cloudflare Worker ── Durable Object（临时会话）
+                                      ├─ KV（自动回复配置）
+                                      ├─ R2（图片对象）
+                                      └─ Telegram Bot（客服通知与回复）
 ```
 
-The Worker owns HTTP routing and Telegram webhook handling. A single named Durable Object coordinates in-memory visitor sessions and WebSockets. KV stores auto-reply configuration, while R2 stores image objects without database records.
+Worker 负责 HTTP 路由、图片接口和 Telegram Webhook；名为 `ChatRoom` 的 Durable Object 负责内存中的会话与 WebSocket；KV 和 R2 不承担聊天历史或身份认证。
 
-## Technology stack
+## 技术栈
 
-| Area             | Technology                           | Planned responsibility                        |
-| ---------------- | ------------------------------------ | --------------------------------------------- |
-| Runtime          | Cloudflare Workers                   | Edge-hosted backend application               |
-| Realtime         | Durable Objects and WebSocket        | Stateful conversation coordination            |
-| Database         | None in MVP                          | Intentionally no persistent chat history      |
-| Configuration    | Cloudflare KV                        | Keyword auto-reply JSON                       |
-| Storage          | Cloudflare R2                        | Customer and administrator image objects      |
-| HTTP framework   | Hono                                 | Typed Worker routing and middleware           |
-| Customer service | Telegram Bot                         | Support agent conversation interface          |
-| Frontend         | React, TypeScript, CSS               | Customer-facing chat experience               |
-| Tooling          | pnpm, Turborepo, Wrangler v4         | Workspace, task orchestration, and deployment |
-| Quality          | TypeScript, ESLint, Prettier, Vitest | Static analysis, formatting, and testing      |
+| 领域       | 技术                                        |
+| ---------- | ------------------------------------------- |
+| 运行时     | Cloudflare Workers、Node.js 20+             |
+| 实时通信   | Durable Objects、WebSocket                  |
+| 前端       | React、TypeScript、Vite                     |
+| HTTP       | Hono                                        |
+| 配置与存储 | Cloudflare KV、Cloudflare R2                |
+| 工程化     | pnpm Workspace、Turborepo、Wrangler v4      |
+| 质量保障   | TypeScript strict、ESLint、Prettier、Vitest |
 
-## Repository structure
+## 项目目录
 
 ```text
 live-support/
-├── apps/
-│   ├── telegram-bot/    # Future Telegram customer service application
-│   ├── widget/          # Embeddable React chat widget and transport
-│   └── worker/          # Cloudflare Worker, realtime, and Telegram routes
-├── packages/
-│   ├── shared/          # Future cross-application primitives
-│   ├── types/           # Shared TypeScript contracts
-│   └── utils/           # Reusable transport utilities
-├── docs/                # Product and engineering documentation
-├── scripts/             # Future repository automation
-├── .github/             # Future GitHub project configuration
-├── eslint.config.js     # Shared ESLint flat configuration
-├── pnpm-workspace.yaml  # Workspace package discovery and dependency catalog
-├── tsconfig.base.json   # Strict shared TypeScript settings
-└── turbo.json           # Monorepo task graph
+├─ apps/
+│  ├─ worker/             # Cloudflare Worker、路由、Durable Object、Telegram 集成
+│  ├─ widget/             # 可嵌入的 React 客服窗口
+│  └─ telegram-bot/       # 预留的 Telegram 应用目录
+├─ packages/
+│  ├─ shared/             # 预留的跨应用模块
+│  ├─ types/              # 共享 TypeScript 类型
+│  └─ utils/              # 可复用工具（含图片上传）
+├─ docs/                  # 架构、部署和集成说明
+├─ scripts/               # 构建与部署脚本
+├─ pnpm-workspace.yaml
+├─ turbo.json
+├─ tsconfig.base.json
+└─ eslint.config.js
 ```
 
-Each application and package remains independently deployable or reusable; source files are added only to the package that owns each capability.
+## 安装与开发
 
-## Development guide
-
-### Prerequisites
-
-- Node.js 20.19 or newer
-- Corepack or pnpm 11 or newer
-
-### Installation
+环境要求：Node.js 20.19+、pnpm 11+（可通过 Corepack 启用）。
 
 ```bash
 git clone https://github.com/your-org/live-support.git
 cd live-support
 corepack enable
 pnpm install
-```
-
-### Repository checks
-
-```bash
 pnpm check
 ```
 
-The individual commands are also available:
+常用检查命令：
 
 ```bash
 pnpm lint
@@ -102,135 +84,131 @@ pnpm test
 pnpm format:check
 ```
 
-Run the Worker locally with:
+本地运行 Worker：
 
 ```bash
 cp apps/worker/.dev.vars.example apps/worker/.dev.vars
 pnpm --filter @live-support/worker dev
 ```
 
-Build and development tasks are orchestrated through Turborepo. The Worker build validates the production Wrangler configuration and produces a dry-run bundle, while the widget build performs a strict TypeScript check.
+Widget 使用 Vite 构建：
 
-### Required environment variables
+```bash
+pnpm --filter @live-support/widget dev
+pnpm --filter @live-support/widget build
+```
 
-Set these as Wrangler secrets for both environments:
+## 环境变量
 
-| Variable                  | Purpose                                       |
-| ------------------------- | --------------------------------------------- |
-| `TELEGRAM_BOT_TOKEN`      | Telegram Bot API token                        |
-| `TELEGRAM_ADMIN_CHAT_IDS` | Comma-separated administrator chat IDs        |
-| `TELEGRAM_WEBHOOK_SECRET` | Secret header used to verify webhook requests |
+以下变量应作为 Wrangler secret 配置在对应环境中：
 
-`TELEGRAM_WEBHOOK_URL` is used by the deployment hook and should point to the public `/webhook/telegram` endpoint. It is not stored in the Worker bundle.
+| 变量                      | 说明                                 |
+| ------------------------- | ------------------------------------ |
+| `TELEGRAM_BOT_TOKEN`      | Telegram Bot API 令牌                |
+| `TELEGRAM_ADMIN_CHAT_IDS` | 管理员 Chat ID，多个值用英文逗号分隔 |
+| `TELEGRAM_WEBHOOK_SECRET` | Webhook 请求校验密钥                 |
 
-### Cloudflare deployment
+部署脚本另外读取 `TELEGRAM_WEBHOOK_URL`，它应指向公开的 `/webhook/telegram` 地址，不会写入 Worker 构建产物。
 
-Wrangler environments are defined in [apps/worker/wrangler.jsonc](apps/worker/wrangler.jsonc):
+## Cloudflare Worker 部署
 
-- `development` uses local Durable Objects, KV, and R2 emulation.
-- `production` uses separately named Cloudflare resources. Missing resource IDs are intentionally left for Wrangler to provision on the first authenticated deploy.
-
-Set production secrets, then deploy the Worker:
+Worker 配置位于 `apps/worker/wrangler.jsonc`，包含 `development` 和 `production` 环境、Durable Object、KV、R2 绑定及迁移配置。先完成 Cloudflare 登录和资源准备，再写入 secret：
 
 ```bash
 pnpm --filter @live-support/worker exec wrangler secret put TELEGRAM_BOT_TOKEN --env production
 pnpm --filter @live-support/worker exec wrangler secret put TELEGRAM_ADMIN_CHAT_IDS --env production
 pnpm --filter @live-support/worker exec wrangler secret put TELEGRAM_WEBHOOK_SECRET --env production
-TELEGRAM_BOT_TOKEN=<bot-token> TELEGRAM_WEBHOOK_SECRET=<webhook-secret> TELEGRAM_WEBHOOK_URL=https://<worker-domain>/webhook/telegram pnpm deploy
 ```
 
-`pnpm deploy` runs the production Worker deploy and automatically registers the Telegram webhook when `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, and `TELEGRAM_WEBHOOK_URL` are available.
-
-### KV configuration
-
-The auto-reply service reads the `auto-replies` key as JSON from `CHAT_CONFIG`:
-
-```json
-{ "充值": "您好，请联系客服处理充值问题。", "提现": "您好，请联系客服处理提现问题。" }
-```
-
-Upload the configuration with Wrangler:
+部署 Worker：
 
 ```bash
-pnpm --filter @live-support/worker exec wrangler kv key put auto-replies '{"充值":"您好，请联系客服处理充值问题。"}' --binding CHAT_CONFIG --env production
+pnpm deploy
 ```
 
-The Worker caches the configuration in memory for 60 seconds and forwards unmatched messages to Telegram.
+设置 `TELEGRAM_BOT_TOKEN`、`TELEGRAM_WEBHOOK_SECRET` 和 `TELEGRAM_WEBHOOK_URL=https://<worker-domain>/webhook/telegram` 后，部署脚本会自动注册 Telegram Webhook。也可以先执行 `pnpm exec wrangler deploy --dry-run --env production` 检查构建。
 
-### R2 image storage
+## Cloudflare Pages 部署
 
-`CHAT_IMAGES` is provisioned by Wrangler per environment. The Worker validates JPEG, PNG, GIF, and WebP uploads up to 10 MB, retries an R2 write once, and serves successful objects at `/images/<key>` with immutable caching headers. No database record is created.
-
-### Pages deployment
-
-The widget package includes a Vite build, Pages configuration, and a generated deployment surface under `apps/widget/public`. Deploy it after authenticating Wrangler and creating the `live-support-widget` Pages project:
-
-```bash
-pnpm deploy:pages
-```
-
-Cloudflare Pages and the Worker can be deployed independently. Same-origin deployments continue to use `/ws` and `/images` automatically. If Pages and the Worker use different domains, initialize the widget with the Worker origin so both WebSocket and image requests target the Worker:
-
-```tsx
-mountChatWidget(container, {
-  connection: {
-    baseUrl: 'https://your-worker.workers.dev',
-  },
-});
-```
-
-For the included demo, set `data-worker-base-url` in `apps/widget/index.html` to the Worker origin. The bootstrap page passes that value into `mountChatWidget()`; no Worker URL is hardcoded in the source. The React widget remains available as the reusable `@live-support/widget` package for embedding in an existing site.
-
-For Cloudflare Pages, the recommended deployment-time configuration is the build environment variable `VITE_WORKER_BASE_URL`. Set it in the Pages project under Settings → Environment variables for the Production or Preview environment, for example:
+Widget 可以独立托管在 Cloudflare Pages，Worker 可以部署在另一个 `workers.dev` 或自定义域名。Pages 不会自动代理 Worker 的 `/ws`，因此跨域部署时必须在 Pages 项目中设置构建环境变量：
 
 ```text
 VITE_WORKER_BASE_URL=https://your-worker.workers.dev
 ```
 
-The bootstrap priority is `VITE_WORKER_BASE_URL`, then `data-worker-base-url`, then same-origin defaults. Vite injects the value at build time; no `vite.config.ts` or additional Pages build configuration is required. Deploy again after changing the variable. `data-worker-base-url` remains available for embedding and manual testing.
+变量名必须是 `VITE_WORKER_BASE_URL`，并分别配置 Production 和 Preview。Vite 会在构建时注入该变量，不需要修改 `vite.config.ts` 或额外的 Pages 构建配置。变量优先级为：`VITE_WORKER_BASE_URL` → `data-worker-base-url` → 同源默认地址。嵌入现有网站或手动测试时，仍可使用：
 
-### Telegram workflow
+```html
+<main id="live-support-widget" data-worker-base-url=""></main>
+```
 
-Customer text and image messages are delivered to every configured administrator. The first non-auto-replied message in a connected session includes website, visitor, Cloudflare location, timezone, language, device, browser, network, user agent, and connection time metadata. Telegram replies only forward when the administrator uses Telegram Reply; disconnected visitors are ignored safely.
+或在代码中传入：
 
-## Coding standards
+```tsx
+mountChatWidget(container, {
+  connection: { baseUrl: 'https://your-worker.workers.dev' },
+});
+```
 
-- Use strict TypeScript and modern ECMAScript modules.
-- Do not introduce `any`; model boundaries explicitly and narrow unknown input safely.
-- Keep deployable applications isolated under `apps/` and reusable code under `packages/`.
-- Prefer small modules with a single responsibility and explicit public contracts.
-- Format all supported files with Prettier and keep ESLint free of warnings.
-- Add Vitest coverage with every behavior introduced in a future phase.
-- Never commit secrets, local Wrangler variables, generated output, or Cloudflare credentials.
-- Keep architecture and operational documentation synchronized with implementation changes.
+构建并发布 Pages：
 
-## Roadmap
+```bash
+pnpm deploy:pages
+```
 
-| Phase | Scope                                                              | Status   |
-| ----- | ------------------------------------------------------------------ | -------- |
-| 0     | Repository initialization and engineering standards                | Complete |
-| 1     | Core domain contracts and Cloudflare Worker foundation             | Complete |
-| 2     | Realtime conversations with Durable Objects and WebSocket          | Complete |
-| 3     | D1 persistence and conversation lifecycle                          | Planned  |
-| 4     | Embeddable customer widget                                         | Complete |
-| 5     | Telegram customer service integration                              | Complete |
-| 6     | Automation, media storage, observability, and production hardening | Complete |
+## Telegram Bot 配置
 
-See [docs/roadmap.md](docs/roadmap.md) for the roadmap document that will evolve with the project.
+1. 在 BotFather 创建 Bot，取得 `TELEGRAM_BOT_TOKEN`。
+2. 管理员向 Bot 发送 `/start`，从 `getUpdates` 获取 Chat ID。
+3. 将一个或多个 Chat ID 写入 `TELEGRAM_ADMIN_CHAT_IDS`。
+4. 设置 `TELEGRAM_WEBHOOK_SECRET` 和公开的 `TELEGRAM_WEBHOOK_URL`。
+5. 执行 `pnpm deploy` 注册 Webhook。
 
-## Future features
+访客消息会发送给所有管理员；管理员必须使用 Telegram 的“回复”功能，系统才能将文字或图片回复转发给对应访客。访客断开后，回复会被安全忽略。
 
-- D1-backed conversation history
-- Authentication and operator dashboard
-- Typing indicators and richer read status
-- Configurable welcome messages
-- Multi-tenant account management
-- Additional observability integrations
+## Webhook、KV 与 R2
 
-## Contributing
+Telegram Webhook 地址为 `/webhook/telegram`，请求必须携带正确的 secret。自动回复配置存放在 KV 绑定 `CHAT_CONFIG` 的 `auto-replies` 键中，值为 JSON 对象，键名采用大小写敏感的精确匹配：
 
-Contributions will be welcomed as implementation phases begin. Before opening a change, run `pnpm check`, keep the change within one architectural concern, and update relevant documentation. Contribution guidelines and governance documents will be added before the first functional release.
+```json
+{ "充值": "您好，请联系客服处理充值问题。", "提现": "您好，请联系客服处理提现问题。" }
+```
 
-## License
+```bash
+pnpm --filter @live-support/worker exec wrangler kv key put auto-replies '{"充值":"您好，请联系客服处理充值问题。"}' --binding CHAT_CONFIG --env production
+```
 
-This project is released under the [MIT License](LICENSE).
+图片写入 `CHAT_IMAGES` R2，Worker 不创建数据库记录；成功后通过 `/images/<key>` 提供带缓存头的读取接口。
+
+## 常见问题
+
+**Pages 上连接到了错误的 `/ws`？** 确认 Pages 的 Production/Preview 都设置了 `VITE_WORKER_BASE_URL`，修改变量后重新构建部署。
+
+**Telegram 没有收到通知？** 检查管理员是否先向 Bot 发送 `/start`、Chat ID 是否用逗号分隔、三个 secret 是否配置在同一 Wrangler 环境，并查看 Worker 日志。
+
+**自动回复没有触发？** 确认 KV 键名为 `auto-replies`，值是合法 JSON，且访客消息与关键词完全一致；KV 缓存最多 60 秒刷新一次。
+
+**图片上传失败？** 仅支持 JPEG、PNG、GIF、WebP，文件大小不能超过 10 MB，并确认 R2 绑定可用。
+
+## 开发规范与打包
+
+代码使用严格 TypeScript、现代 ES Modules，禁止 `any`，通过 ESLint 和 Prettier 保持一致风格。应用代码放在 `apps/`，可复用代码放在 `packages/`；不要提交 secret、`.dev.vars`、生成目录或 Cloudflare 凭据。修改后请运行 `pnpm check`，并同步更新相关文档。
+
+生产构建与部署：
+
+```bash
+pnpm build
+pnpm deploy
+pnpm deploy:pages
+```
+
+## 路线图
+
+- 已完成：Worker 基础、WebSocket 会话、React Widget、Telegram 通知与回复、R2 图片、KV 自动回复和生产部署基础。
+- 计划中：D1 聊天历史、认证、客服后台、多租户、Typing Indicator 和更丰富的可观测性。
+
+详细说明见 [docs/roadmap.md](docs/roadmap.md) 及其他 `docs/` 文档。
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE) 开源。
