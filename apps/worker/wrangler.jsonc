@@ -25,17 +25,19 @@
   "migrations": [
     {
       "tag": "v1",
-      "new_classes": ["ChatRoom"],
+      "new_sqlite_classes": ["ChatRoom"],
     },
   ],
   "kv_namespaces": [
     {
       "binding": "CHAT_CONFIG",
+      "id": "93772ddec7644432b52d273998852b97"
     },
   ],
   "r2_buckets": [
     {
       "binding": "CHAT_IMAGES",
+      "bucket_name": "chat-images"
     },
   ],
   "observability": {
@@ -64,11 +66,13 @@
       "kv_namespaces": [
         {
           "binding": "CHAT_CONFIG",
+          "id": "93772ddec7644432b52d273998852b97"
         },
       ],
       "r2_buckets": [
         {
           "binding": "CHAT_IMAGES",
+          "bucket_name": "chat-images"
         },
       ],
       "observability": {
@@ -96,11 +100,13 @@
       "kv_namespaces": [
         {
           "binding": "CHAT_CONFIG",
+          "id": "93772ddec7644432b52d273998852b97"
         },
       ],
       "r2_buckets": [
         {
           "binding": "CHAT_IMAGES",
+          "bucket_name": "chat-images"
         },
       ],
       "observability": {
