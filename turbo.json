@@ -20,6 +20,7 @@
       "dependsOn": ["^typecheck"]
     },
     "deploy": {
+      "dependsOn": ["build", "typecheck", "lint", "test"],
       "cache": false
     }
   }

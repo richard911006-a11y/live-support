@@ -10,7 +10,11 @@ import type {
   SupportedImageMimeType,
   VisitorId,
 } from '@live-support/types';
-import { SUPPORTED_IMAGE_MIME_TYPES } from '@live-support/types';
+import {
+  MAX_IMAGE_CAPTION_LENGTH,
+  MAX_MESSAGE_LENGTH,
+  SUPPORTED_IMAGE_MIME_TYPES,
+} from '@live-support/types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -91,13 +95,15 @@ export function parseClientMessage(raw: unknown): ClientMessage | undefined {
 
   switch (value.type) {
     case 'connect':
-      return isNonEmptyString(value.visitorId)
-        ? { type: 'connect', visitorId: value.visitorId as VisitorId }
+      return value.visitorId === undefined || isNonEmptyString(value.visitorId)
+        ? value.visitorId === undefined
+          ? { type: 'connect' }
+          : { type: 'connect', visitorId: value.visitorId as VisitorId }
         : undefined;
     case 'heartbeat':
       return { type: 'heartbeat' };
     case 'message':
-      return isNonEmptyString(value.content)
+      return isNonEmptyString(value.content) && value.content.length <= MAX_MESSAGE_LENGTH
         ? { type: 'message', content: value.content }
         : undefined;
     case 'image': {
@@ -106,7 +112,8 @@ export function parseClientMessage(raw: unknown): ClientMessage | undefined {
         !isNonEmptyString(value.url) ||
         !isHttpUrl(value.url) ||
         !isSupportedImageType(value.contentType) ||
-        (value.caption !== undefined && typeof value.caption !== 'string')
+        (value.caption !== undefined &&
+          (typeof value.caption !== 'string' || value.caption.length > MAX_IMAGE_CAPTION_LENGTH))
       ) {
         return undefined;
       }
@@ -148,11 +155,13 @@ export function parseServerMessage(raw: unknown): ServerMessage | undefined {
     case 'connected':
       return isNonEmptyString(value.visitorId) &&
         isNonEmptyString(value.sessionId) &&
+        isNonEmptyString(value.sessionToken) &&
         typeof value.connectedAt === 'number'
         ? {
             type: 'connected',
             visitorId: value.visitorId as VisitorId,
             sessionId: value.sessionId as SessionId,
+            sessionToken: value.sessionToken,
             connectedAt: value.connectedAt,
           }
         : undefined;
@@ -160,6 +169,7 @@ export function parseServerMessage(raw: unknown): ServerMessage | undefined {
       return isNonEmptyString(value.messageId) &&
         isNonEmptyString(value.visitorId) &&
         isNonEmptyString(value.content) &&
+        value.content.length <= MAX_MESSAGE_LENGTH &&
         typeof value.sentAt === 'number' &&
         (value.autoReplied === undefined || typeof value.autoReplied === 'boolean')
         ? value.autoReplied === undefined
@@ -187,7 +197,8 @@ export function parseServerMessage(raw: unknown): ServerMessage | undefined {
         !isHttpUrl(value.url) ||
         !isSupportedImageType(value.contentType) ||
         typeof value.sentAt !== 'number' ||
-        (value.caption !== undefined && typeof value.caption !== 'string')
+        (value.caption !== undefined &&
+          (typeof value.caption !== 'string' || value.caption.length > MAX_IMAGE_CAPTION_LENGTH))
       ) {
         return undefined;
       }

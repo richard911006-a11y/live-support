@@ -8,7 +8,12 @@
   "preview_urls": true,
   "minify": true,
   "upload_source_maps": true,
-  "secrets": ["TELEGRAM_BOT_TOKEN", "TELEGRAM_ADMIN_CHAT_IDS", "TELEGRAM_WEBHOOK_SECRET"],
+  "vars": {
+    "PUBLIC_WIDGET_ORIGINS": "",
+  },
+  "secrets": {
+    "required": ["TELEGRAM_BOT_TOKEN", "TELEGRAM_ADMIN_CHAT_IDS", "TELEGRAM_WEBHOOK_SECRET"],
+  },
   "durable_objects": {
     "bindings": [
       {
@@ -42,7 +47,12 @@
       "name": "live-support-worker-dev",
       "workers_dev": true,
       "preview_urls": true,
-      "secrets": ["TELEGRAM_BOT_TOKEN", "TELEGRAM_ADMIN_CHAT_IDS", "TELEGRAM_WEBHOOK_SECRET"],
+      "vars": {
+        "PUBLIC_WIDGET_ORIGINS": "",
+      },
+      "secrets": {
+        "required": ["TELEGRAM_BOT_TOKEN", "TELEGRAM_ADMIN_CHAT_IDS", "TELEGRAM_WEBHOOK_SECRET"],
+      },
       "durable_objects": {
         "bindings": [
           {
@@ -51,12 +61,6 @@
           },
         ],
       },
-      "migrations": [
-        {
-          "tag": "v1",
-          "new_classes": ["ChatRoom"],
-        },
-      ],
       "kv_namespaces": [
         {
           "binding": "CHAT_CONFIG",
@@ -75,7 +79,12 @@
     "production": {
       "name": "live-support-worker",
       "workers_dev": true,
-      "secrets": ["TELEGRAM_BOT_TOKEN", "TELEGRAM_ADMIN_CHAT_IDS", "TELEGRAM_WEBHOOK_SECRET"],
+      "vars": {
+        "PUBLIC_WIDGET_ORIGINS": "",
+      },
+      "secrets": {
+        "required": ["TELEGRAM_BOT_TOKEN", "TELEGRAM_ADMIN_CHAT_IDS", "TELEGRAM_WEBHOOK_SECRET"],
+      },
       "durable_objects": {
         "bindings": [
           {
@@ -84,12 +93,6 @@
           },
         ],
       },
-      "migrations": [
-        {
-          "tag": "v1",
-          "new_classes": ["ChatRoom"],
-        },
-      ],
       "kv_namespaces": [
         {
           "binding": "CHAT_CONFIG",

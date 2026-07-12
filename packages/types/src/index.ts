@@ -1,4 +1,4 @@
-export { HEARTBEAT_INTERVAL_MS } from './websocket';
+export { HEARTBEAT_INTERVAL_MS, MAX_IMAGE_CAPTION_LENGTH, MAX_MESSAGE_LENGTH } from './websocket';
 export { IMAGE_MAX_SIZE_BYTES, SUPPORTED_IMAGE_MIME_TYPES } from './images';
 export type { ImageId, MessageId, SessionId, TelegramChatId, VisitorId } from './identifiers';
 export type { ImageUploadResponse, ImageUploadResult, SupportedImageMimeType } from './images';

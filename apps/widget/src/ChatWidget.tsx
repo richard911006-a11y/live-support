@@ -92,7 +92,7 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
   const [uploadError, setUploadError] = useState<string | undefined>(undefined);
 
   if (clientRef.current === null) {
-    clientRef.current = new WebSocketClient(connection);
+    clientRef.current = new WebSocketClient({ ...(connection ?? {}), autoConnect: false });
   }
 
   const client = clientRef.current;
@@ -100,6 +100,10 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
   useEffect(() => {
     const unsubscribeStatus = client.subscribeStatus(setStatus);
     const unsubscribeMessages = client.subscribe((message: ServerMessage) => {
+      if (message.type === 'error') {
+        setUploadError(message.message);
+      }
+
       if (message.type === 'message') {
         setMessages((currentMessages) => {
           if (message.visitorId === client.visitorId) {
@@ -197,6 +201,10 @@ export function ChatWidget({ connection, title = 'Live support' }: ChatWidgetPro
       unsubscribeMessages();
       client.disconnect();
     };
+  }, [client]);
+
+  useEffect(() => {
+    client.connect();
   }, [client]);
 
   useEffect(() => {

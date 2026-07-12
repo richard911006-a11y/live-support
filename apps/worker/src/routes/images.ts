@@ -5,13 +5,20 @@ import { IMAGE_MAX_SIZE_BYTES } from '@live-support/types';
 import { error, success } from '../http/responses';
 import { ImageService, ImageUploadError } from '../modules/r2';
 import { logger } from '../utils/logger';
+import { getClientRateLimitKey, InMemoryRateLimiter } from '../utils/rate-limit';
 import type { Env } from '../types/env';
+
+const uploadLimiter = new InMemoryRateLimiter(20, 60_000);
 
 export const imageRoutes = new Hono<{ Bindings: Env }>()
   .use('*', async (context, next) => {
     const origin = context.req.header('origin');
+    const allowedOrigins =
+      context.env.PUBLIC_WIDGET_ORIGINS?.split(',')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0) ?? [];
 
-    if (origin !== undefined) {
+    if (origin !== undefined && allowedOrigins.includes(origin)) {
       context.header('access-control-allow-origin', origin);
       context.header('access-control-allow-methods', 'GET, POST, OPTIONS');
       context.header('access-control-allow-headers', 'content-type');
@@ -30,6 +37,10 @@ export const imageRoutes = new Hono<{ Bindings: Env }>()
 
 async function uploadImage(context: Context<{ Bindings: Env }>): Promise<Response> {
   try {
+    if (!uploadLimiter.consume(getClientRateLimitKey(context.req.raw))) {
+      return error('Too many image uploads. Please try again shortly.', 429);
+    }
+
     const contentLength = Number(context.req.header('content-length'));
 
     if (Number.isFinite(contentLength) && contentLength > IMAGE_MAX_SIZE_BYTES + 1_048_576) {
@@ -75,7 +86,13 @@ async function uploadImage(context: Context<{ Bindings: Env }>): Promise<Respons
 async function getImage(context: Context<{ Bindings: Env }>): Promise<Response> {
   try {
     const pathname = new URL(context.req.url).pathname;
-    const key = decodeURIComponent(pathname.slice('/images/'.length));
+    let key: string;
+
+    try {
+      key = decodeURIComponent(pathname.slice('/images/'.length));
+    } catch {
+      return error('Invalid image key.', 400);
+    }
 
     if (key.length === 0) {
       return error('Image key is required.', 400);

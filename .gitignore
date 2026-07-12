@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 dist/
+apps/widget/public/
 coverage/
 .turbo/
 .wrangler/

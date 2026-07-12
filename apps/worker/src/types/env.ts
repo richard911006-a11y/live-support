@@ -6,4 +6,5 @@ export interface Env {
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_ADMIN_CHAT_IDS: string;
   TELEGRAM_WEBHOOK_SECRET: string;
+  PUBLIC_WIDGET_ORIGINS?: string;
 }

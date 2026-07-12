@@ -9,7 +9,6 @@ import {
 } from '@live-support/types';
 import {
   buildWebSocketUrl,
-  getOrCreateVisitorId,
   parseServerMessage,
   serializeProtocolMessage,
 } from '@live-support/utils';
@@ -56,14 +55,13 @@ function connectionError(message: string): ErrorMessage {
 }
 
 export class WebSocketClient {
-  public readonly visitorId: VisitorId;
-
   private readonly endpoint: string;
   private readonly baseUrl: string;
   private readonly heartbeatIntervalMs: number;
   private readonly reconnectInitialDelayMs: number;
   private readonly reconnectMaxDelayMs: number;
   private readonly websocketFactory: (url: string) => WebSocket;
+  private readonly storage: Storage | undefined;
   private readonly listeners = new Set<ServerMessageListener>();
   private readonly statusListeners = new Set<ConnectionStatusListener>();
   private socket: WebSocket | undefined;
@@ -74,9 +72,12 @@ export class WebSocketClient {
   private currentSessionId: SessionId | undefined;
   private lastPongAt = 0;
   private connectionStatus: ConnectionStatus = 'disconnected';
+  private currentVisitorId: VisitorId | undefined;
+  private sessionToken: string | undefined;
 
   public constructor(options: WebSocketClientOptions = {}) {
-    this.visitorId = options.visitorId ?? getOrCreateVisitorId(options.storage ?? defaultStorage());
+    this.storage = options.storage ?? defaultStorage();
+    this.sessionToken = this.readSessionToken();
     this.endpoint = options.endpoint ?? '/ws';
     this.baseUrl = options.baseUrl ?? defaultBaseUrl();
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS;
@@ -90,6 +91,10 @@ export class WebSocketClient {
     if (options.autoConnect ?? defaultAutoConnect) {
       this.connect();
     }
+  }
+
+  public get visitorId(): VisitorId | undefined {
+    return this.currentVisitorId;
   }
 
   public get sessionId(): SessionId | undefined {
@@ -114,7 +119,9 @@ export class WebSocketClient {
     this.setStatus(this.reconnectAttempt > 0 ? 'reconnecting' : 'connecting');
 
     const url = new URL(buildWebSocketUrl(this.endpoint, this.baseUrl));
-    url.searchParams.set('visitorId', this.visitorId);
+    if (this.sessionToken !== undefined) {
+      url.searchParams.set('token', this.sessionToken);
+    }
 
     try {
       const socket = this.websocketFactory(url.toString());
@@ -182,15 +189,11 @@ export class WebSocketClient {
       return;
     }
 
-    this.reconnectAttempt = 0;
     this.lastPongAt = Date.now();
 
-    if (!this.send({ type: 'connect', visitorId: this.visitorId })) {
+    if (!this.send({ type: 'connect' })) {
       socket.close(1011, 'Unable to initialize the session');
-      return;
     }
-
-    this.startHeartbeat();
   }
 
   private handleMessage(socket: WebSocket, event: MessageEvent): void {
@@ -211,7 +214,13 @@ export class WebSocketClient {
     }
 
     if (message.type === 'connected') {
+      this.currentVisitorId = message.visitorId;
       this.currentSessionId = message.sessionId;
+      this.sessionToken = message.sessionToken;
+      this.writeSessionToken(message.sessionToken);
+      this.reconnectAttempt = 0;
+      this.lastPongAt = Date.now();
+      this.startHeartbeat();
       this.setStatus('connected');
     }
 
@@ -314,11 +323,32 @@ export class WebSocketClient {
       this.reconnectMaxDelayMs,
       this.reconnectInitialDelayMs * 2 ** (this.reconnectAttempt - 1),
     );
+    const jitterRange = Math.max(250, Math.floor(delay * 0.25));
+    const random = new Uint32Array(1);
+    crypto.getRandomValues(random);
+    const jitter = random[0] === undefined ? 0 : random[0] % jitterRange;
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined;
       this.connect();
-    }, delay);
+    }, delay + jitter);
+  }
+
+  private readSessionToken(): string | undefined {
+    try {
+      const token = this.storage?.getItem('live-support:session-token');
+      return token === null || token === undefined || token.length === 0 ? undefined : token;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private writeSessionToken(token: string): void {
+    try {
+      this.storage?.setItem('live-support:session-token', token);
+    } catch {
+      // Storage can be unavailable in privacy-restricted browser contexts.
+    }
   }
 
   private clearReconnectTimer(): void {

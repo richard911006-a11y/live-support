@@ -10,6 +10,7 @@ export default defineConfig(
       '**/node_modules/**',
       '**/.turbo/**',
       '**/.wrangler/**',
+      'apps/widget/public/**',
       '**/worker-configuration.d.ts',
     ],
   },

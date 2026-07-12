@@ -7,6 +7,7 @@ export interface SessionSocket {
 
 export interface ChatSession<Socket extends SessionSocket = SessionSocket> {
   visitorId: VisitorId;
+  sessionToken: string;
   sessionId: SessionId;
   websocket: Socket;
   connectedAt: number;
@@ -26,8 +27,13 @@ export class SessionManager<Socket extends SessionSocket = SessionSocket> {
   public createSession(
     visitorId: VisitorId,
     websocket: Socket,
+    sessionTokenOrVisitorInfo?: string | VisitorInfo,
     visitorInfo?: VisitorInfo,
   ): ChatSession<Socket> {
+    const sessionToken =
+      typeof sessionTokenOrVisitorInfo === 'string' ? sessionTokenOrVisitorInfo : '';
+    const resolvedVisitorInfo =
+      typeof sessionTokenOrVisitorInfo === 'string' ? visitorInfo : sessionTokenOrVisitorInfo;
     const existingSessionId = this.sessionIdsByVisitor.get(visitorId);
 
     if (existingSessionId !== undefined) {
@@ -49,11 +55,12 @@ export class SessionManager<Socket extends SessionSocket = SessionSocket> {
     const timestamp = this.clock();
     const session: ChatSession<Socket> = {
       visitorId,
+      sessionToken,
       sessionId: crypto.randomUUID() as SessionId,
       websocket,
       connectedAt: timestamp,
       lastHeartbeat: timestamp,
-      visitorInfo: visitorInfo ?? createDefaultVisitorInfo(visitorId, timestamp),
+      visitorInfo: resolvedVisitorInfo ?? createDefaultVisitorInfo(visitorId, timestamp),
       telegramConversationStarted: false,
     };
 

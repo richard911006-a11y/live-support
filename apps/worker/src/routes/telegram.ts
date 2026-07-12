@@ -97,11 +97,11 @@ async function handleWebhook(context: Context<{ Bindings: Env }>): Promise<Respo
       );
     } catch (cause) {
       logger.error('Telegram image reply processing failed', cause);
-      return success({ ok: true, read: true, delivered: false });
+      return error('Telegram image reply processing failed', 503);
     }
   } catch (cause) {
     logger.error('Telegram webhook processing failed', cause);
-    return success({ ok: true, ignored: true, read: false, delivered: false });
+    return error('Telegram webhook processing failed', 503);
   }
 }
 
@@ -121,7 +121,7 @@ async function forwardReply(
   payload: ReplyPayload,
 ): Promise<Response> {
   try {
-    const room = context.env.CHAT_ROOM.getByName('live-support');
+    const room = context.env.CHAT_ROOM.getByName(payload.visitorId);
     const response = await room.fetch(
       new Request('https://chat-room.internal/internal/telegram/reply', {
         method: 'POST',
@@ -132,7 +132,7 @@ async function forwardReply(
 
     if (!response.ok) {
       logger.warn('Telegram reply could not reach the ChatRoom', { status: response.status });
-      return success({ ok: true, read: true, delivered: false });
+      return error('Telegram reply delivery is temporarily unavailable.', 503);
     }
 
     const result = (await response.json()) as { delivered?: unknown };
@@ -140,7 +140,7 @@ async function forwardReply(
     return success({ ok: true, read: true, delivered: result.delivered === true });
   } catch (cause) {
     logger.error('Telegram reply forwarding failed', cause);
-    return success({ ok: true, read: true, delivered: false });
+    return error('Telegram reply delivery failed.', 503);
   }
 }
 

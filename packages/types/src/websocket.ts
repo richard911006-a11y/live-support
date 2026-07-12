@@ -2,10 +2,13 @@ import type { SupportedImageMimeType } from './images';
 import type { ImageId, MessageId, SessionId, VisitorId } from './identifiers';
 
 export const HEARTBEAT_INTERVAL_MS = 30_000;
+export const MAX_MESSAGE_LENGTH = 4_000;
+export const MAX_IMAGE_CAPTION_LENGTH = 1_000;
 
 export interface ConnectMessage {
   type: 'connect';
-  visitorId: VisitorId;
+  /** Deprecated client field; identity is established by the server-issued token. */
+  visitorId?: VisitorId;
 }
 
 export interface HeartbeatMessage {
@@ -36,6 +39,7 @@ export interface ConnectedMessage {
   type: 'connected';
   visitorId: VisitorId;
   sessionId: SessionId;
+  sessionToken: string;
   connectedAt: number;
 }
 

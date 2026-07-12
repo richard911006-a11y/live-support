@@ -17,6 +17,12 @@ import type { SessionId, VisitorId } from '../../types';
 import type { Env } from '../../types/env';
 import { logger } from '../../utils/logger';
 import { decodeVisitorInfo, VISITOR_INFO_HEADER } from '../../utils/visitor-info';
+import {
+  SESSION_TOKEN_HEADER,
+  verifySessionToken,
+  VISITOR_ID_HEADER,
+} from '../../utils/session-identity';
+import { InMemoryRateLimiter } from '../../utils/rate-limit';
 import type { ChatSession } from './session-manager';
 import { SessionManager } from './session-manager';
 
@@ -27,6 +33,8 @@ const TELEGRAM_SENDER_ID = 'support' as VisitorId;
 export class ChatRoom extends DurableObject<Env> {
   private readonly sessions = new SessionManager<WebSocket>();
   private readonly heartbeatTimers = new Map<SessionId, ReturnType<typeof setTimeout>>();
+  private readonly messageLimiter = new InMemoryRateLimiter(60, 60_000);
+  private readonly imageLimiter = new InMemoryRateLimiter(10, 60_000);
   private readonly telegramService: TelegramService;
   private readonly autoReplyService: AutoReplyService;
 
@@ -36,7 +44,7 @@ export class ChatRoom extends DurableObject<Env> {
     this.autoReplyService = new AutoReplyService(env.CHAT_CONFIG);
   }
 
-  public async fetch(request: Request): Promise<Response> {
+  public override async fetch(request: Request): Promise<Response> {
     const requestUrl = new URL(request.url);
 
     if (request.method === 'POST' && requestUrl.pathname === '/internal/telegram/reply') {
@@ -47,20 +55,31 @@ export class ChatRoom extends DurableObject<Env> {
       return error('WebSocket upgrade required', 426);
     }
 
-    const visitorIdValue = new URL(request.url).searchParams.get('visitorId');
+    const visitorIdValue = request.headers.get(VISITOR_ID_HEADER);
+    const sessionToken = request.headers.get(SESSION_TOKEN_HEADER);
 
-    if (visitorIdValue === null || visitorIdValue.length === 0) {
+    if (visitorIdValue === null || sessionToken === null) {
       return error('visitorId is required', 400);
+    }
+
+    const verifiedVisitorId = await verifySessionToken(
+      sessionToken,
+      this.env.TELEGRAM_WEBHOOK_SECRET,
+    );
+
+    if (verifiedVisitorId === undefined || verifiedVisitorId !== visitorIdValue) {
+      return error('Invalid session token', 401);
     }
 
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
     server.accept();
-    const visitorId = visitorIdValue as VisitorId;
+    const visitorId = verifiedVisitorId;
     const session = this.onConnect(
       visitorId,
       server,
+      sessionToken,
       decodeVisitorInfo(request.headers.get(VISITOR_INFO_HEADER), visitorId),
     );
 
@@ -79,9 +98,10 @@ export class ChatRoom extends DurableObject<Env> {
   public onConnect(
     visitorId: VisitorId,
     websocket: WebSocket,
+    sessionToken: string,
     visitorInfo?: ChatSession<WebSocket>['visitorInfo'],
   ): ChatSession<WebSocket> {
-    const session = this.sessions.createSession(visitorId, websocket, visitorInfo);
+    const session = this.sessions.createSession(visitorId, websocket, sessionToken, visitorInfo);
     this.scheduleHeartbeatTimeout(session);
     return session;
   }
@@ -170,7 +190,7 @@ export class ChatRoom extends DurableObject<Env> {
   ): Promise<void> {
     switch (message.type) {
       case 'connect':
-        if (message.visitorId !== session.visitorId) {
+        if (message.visitorId !== undefined && message.visitorId !== session.visitorId) {
           this.sendError(session, 'visitor_mismatch', 'The visitorId does not match this session.');
           return;
         }
@@ -179,6 +199,7 @@ export class ChatRoom extends DurableObject<Env> {
           type: 'connected',
           visitorId: session.visitorId,
           sessionId: session.sessionId,
+          sessionToken: session.sessionToken,
           connectedAt: session.connectedAt,
         });
         return;
@@ -188,6 +209,16 @@ export class ChatRoom extends DurableObject<Env> {
         this.send(session, { type: 'pong', timestamp: session.lastHeartbeat });
         return;
       case 'message': {
+        if (!this.messageLimiter.consume(session.sessionId)) {
+          this.sendError(
+            session,
+            'rate_limited',
+            'Too many messages. Please try again shortly.',
+            true,
+          );
+          return;
+        }
+
         const autoReply = await this.autoReplyService.matchKeyword(message.content);
         const serverMessage: ServerMessage = {
           type: 'message',
@@ -198,6 +229,7 @@ export class ChatRoom extends DurableObject<Env> {
           ...(autoReply === undefined ? {} : { autoReplied: true }),
         };
         this.broadcast(serverMessage);
+        this.send(session, { type: 'read', messageId: serverMessage.messageId });
 
         if (autoReply !== undefined) {
           this.send(session, {
@@ -222,6 +254,16 @@ export class ChatRoom extends DurableObject<Env> {
         return;
       }
       case 'image': {
+        if (!this.imageLimiter.consume(session.sessionId)) {
+          this.sendError(
+            session,
+            'rate_limited',
+            'Too many images. Please try again shortly.',
+            true,
+          );
+          return;
+        }
+
         const serverImageMessage: ServerImageMessage = {
           type: 'image',
           imageId: message.imageId,
@@ -236,6 +278,10 @@ export class ChatRoom extends DurableObject<Env> {
             : { ...serverImageMessage, caption: message.caption };
 
         this.broadcast(image);
+        this.send(session, {
+          type: 'read',
+          messageId: message.imageId as unknown as MessageId,
+        });
         const includeVisitorInfo = !session.telegramConversationStarted;
         session.telegramConversationStarted = true;
         this.ctx.waitUntil(
@@ -336,8 +382,13 @@ export class ChatRoom extends DurableObject<Env> {
     }
   }
 
-  private sendError(session: ChatSession<WebSocket>, code: string, message: string): void {
-    this.send(session, { type: 'error', code, message, retryable: false });
+  private sendError(
+    session: ChatSession<WebSocket>,
+    code: string,
+    message: string,
+    retryable = false,
+  ): void {
+    this.send(session, { type: 'error', code, message, retryable });
   }
 
   private scheduleHeartbeatTimeout(session: ChatSession<WebSocket>): void {
