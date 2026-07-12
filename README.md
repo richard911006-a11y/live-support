@@ -163,13 +163,31 @@ The Worker caches the configuration in memory for 60 seconds and forwards unmatc
 
 ### Pages deployment
 
-The widget package includes a Pages configuration and a static deployment surface under `apps/widget/public`. Deploy it after authenticating Wrangler and creating the `live-support-widget` Pages project:
+The widget package includes a Vite build, Pages configuration, and a generated deployment surface under `apps/widget/public`. Deploy it after authenticating Wrangler and creating the `live-support-widget` Pages project:
 
 ```bash
 pnpm deploy:pages
 ```
 
-The React widget remains available as the reusable `@live-support/widget` package for embedding in an existing site.
+Cloudflare Pages and the Worker can be deployed independently. Same-origin deployments continue to use `/ws` and `/images` automatically. If Pages and the Worker use different domains, initialize the widget with the Worker origin so both WebSocket and image requests target the Worker:
+
+```tsx
+mountChatWidget(container, {
+  connection: {
+    baseUrl: 'https://your-worker.workers.dev',
+  },
+});
+```
+
+For the included demo, set `data-worker-base-url` in `apps/widget/index.html` to the Worker origin. The bootstrap page passes that value into `mountChatWidget()`; no Worker URL is hardcoded in the source. The React widget remains available as the reusable `@live-support/widget` package for embedding in an existing site.
+
+For Cloudflare Pages, the recommended deployment-time configuration is the build environment variable `VITE_WORKER_BASE_URL`. Set it in the Pages project under Settings → Environment variables for the Production or Preview environment, for example:
+
+```text
+VITE_WORKER_BASE_URL=https://your-worker.workers.dev
+```
+
+The bootstrap priority is `VITE_WORKER_BASE_URL`, then `data-worker-base-url`, then same-origin defaults. Vite injects the value at build time; no `vite.config.ts` or additional Pages build configuration is required. Deploy again after changing the variable. `data-worker-base-url` remains available for embedding and manual testing.
 
 ### Telegram workflow
 
