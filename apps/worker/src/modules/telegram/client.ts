@@ -95,6 +95,15 @@ export class TelegramApiClient {
           `${this.apiBaseUrl}/file/bot${this.botToken}/${filePath}`,
         );
 
+        console.log('[Telegram Debug]', {
+          event: 'api_response',
+          method: 'downloadFile',
+          httpStatus: response.status,
+          ok: undefined,
+          error_code: undefined,
+          description: undefined,
+        });
+
         if (!response.ok) {
           throw new TelegramApiError(
             `Telegram file download failed with status ${response.status}.`,
@@ -104,6 +113,11 @@ export class TelegramApiClient {
 
         return response;
       } catch (cause) {
+        console.error(
+          '[Telegram Debug] Telegram API exception',
+          { method: 'downloadFile', attempt: attempt + 1 },
+          cause,
+        );
         lastError = cause;
       }
     }
@@ -124,6 +138,14 @@ export class TelegramApiClient {
           body: isMultipart ? body : JSON.stringify(body),
         };
 
+        if (method === 'sendMessage' && !isMultipart) {
+          console.log('[Telegram Debug]', {
+            event: 'send_message_request',
+            targetChatId: (body as SendMessageParams).chat_id,
+            attempt: attempt + 1,
+          });
+        }
+
         if (!isMultipart) {
           requestInit.headers = { 'content-type': 'application/json' };
         }
@@ -138,11 +160,28 @@ export class TelegramApiClient {
         try {
           payload = JSON.parse(responseText) as TelegramApiResponse<Result>;
         } catch {
+          console.log('[Telegram Debug]', {
+            event: 'api_response',
+            method,
+            httpStatus: response.status,
+            ok: undefined,
+            error_code: undefined,
+            description: undefined,
+          });
           throw new TelegramApiError(
             `Telegram returned an invalid response with status ${response.status}.`,
             response.status,
           );
         }
+
+        console.log('[Telegram Debug]', {
+          event: 'api_response',
+          method,
+          httpStatus: response.status,
+          ok: payload.ok,
+          error_code: payload.error_code,
+          description: payload.description,
+        });
 
         if (!response.ok || !payload.ok) {
           throw new TelegramApiError(
@@ -161,6 +200,11 @@ export class TelegramApiClient {
 
         return payload.result;
       } catch (cause) {
+        console.error(
+          '[Telegram Debug] Telegram API exception',
+          { method, attempt: attempt + 1 },
+          cause,
+        );
         lastError = cause;
       }
     }

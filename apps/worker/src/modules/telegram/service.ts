@@ -106,6 +106,12 @@ export class TelegramService {
     this.logger = options.logger ?? defaultLogger;
     this.adminChatIds = parseAdminChatIds(env.TELEGRAM_ADMIN_CHAT_IDS);
     this.enabled = botToken.length > 0 && this.adminChatIds.length > 0;
+    console.log('[Telegram Debug]', {
+      event: 'service_initialized',
+      enabled: this.enabled,
+      adminChatIdCount: this.adminChatIds.length,
+      adminChatIds: this.adminChatIds,
+    });
   }
 
   public sendMessage(chatId: TelegramChatId, text: string) {
@@ -125,7 +131,19 @@ export class TelegramService {
     message: string,
     visitorInfo?: VisitorInfo,
   ): Promise<void> {
+    console.log('[Telegram Debug]', {
+      event: 'notify_customer_message_started',
+      visitorId,
+      messagePreview: message.slice(0, 80),
+      destinationAdminChatIds: this.adminChatIds,
+    });
+
     if (!this.enabled) {
+      console.log('[Telegram Debug]', {
+        event: 'notify_customer_message_skipped',
+        reason: 'telegram_service_disabled',
+        visitorId,
+      });
       return;
     }
 
@@ -136,6 +154,12 @@ export class TelegramService {
     const failures = deliveries.filter(
       (delivery): delivery is PromiseRejectedResult => delivery.status === 'rejected',
     );
+    console.log('[Telegram Debug]', {
+      event: 'customer_message_delivery_settled',
+      fulfilledCount: deliveries.length - failures.length,
+      rejectedCount: failures.length,
+      rejectionReasons: failures.map((failure) => failure.reason),
+    });
 
     if (failures.length > 0) {
       this.logger.error(
@@ -162,6 +186,12 @@ export class TelegramService {
     const failures = deliveries.filter(
       (delivery): delivery is PromiseRejectedResult => delivery.status === 'rejected',
     );
+    console.log('[Telegram Debug]', {
+      event: 'customer_image_delivery_settled',
+      fulfilledCount: deliveries.length - failures.length,
+      rejectedCount: failures.length,
+      rejectionReasons: failures.map((failure) => failure.reason),
+    });
 
     if (failures.length > 0) {
       this.logger.error(

@@ -89,6 +89,31 @@ export class ChatRoom extends DurableObject<Env> {
       this.closeSocket(server, 1011, 'Socket error');
     });
     server.addEventListener('message', (message) => {
+      const rawMessage = typeof message.data === 'string' ? message.data : undefined;
+      let messageType = 'unknown';
+
+      if (rawMessage !== undefined) {
+        try {
+          const parsed: unknown = JSON.parse(rawMessage);
+          if (
+            typeof parsed === 'object' &&
+            parsed !== null &&
+            'type' in parsed &&
+            typeof parsed.type === 'string'
+          ) {
+            messageType = parsed.type;
+          }
+        } catch {
+          messageType = 'invalid_json';
+        }
+      }
+
+      console.log('[WebSocket Debug]', {
+        event: 'client_message_received',
+        messageType,
+        visitorId: session.visitorId,
+        messageLength: rawMessage?.length ?? null,
+      });
       this.ctx.waitUntil(this.onMessage(session.sessionId, server, message));
     });
 
@@ -209,7 +234,20 @@ export class ChatRoom extends DurableObject<Env> {
         this.send(session, { type: 'pong', timestamp: session.lastHeartbeat });
         return;
       case 'message': {
-        if (!this.messageLimiter.consume(session.sessionId)) {
+        console.log('[ChatRoom Debug]', {
+          event: 'message_processing_started',
+          visitorId: session.visitorId,
+          messageLength: message.content.length,
+        });
+
+        const rateLimited = !this.messageLimiter.consume(session.sessionId);
+        console.log('[ChatRoom Debug]', {
+          event: 'message_rate_limit_check',
+          visitorId: session.visitorId,
+          rateLimited,
+        });
+
+        if (rateLimited) {
           this.sendError(
             session,
             'rate_limited',
@@ -220,6 +258,11 @@ export class ChatRoom extends DurableObject<Env> {
         }
 
         const autoReply = await this.autoReplyService.matchKeyword(message.content);
+        console.log('[ChatRoom Debug]', {
+          event: 'auto_reply_check',
+          visitorId: session.visitorId,
+          matched: autoReply !== undefined,
+        });
         const serverMessage: ServerMessage = {
           type: 'message',
           messageId: crypto.randomUUID() as MessageId,
@@ -232,6 +275,11 @@ export class ChatRoom extends DurableObject<Env> {
         this.send(session, { type: 'read', messageId: serverMessage.messageId });
 
         if (autoReply !== undefined) {
+          console.log('[ChatRoom Debug]', {
+            event: 'telegram_notification_skipped',
+            reason: 'auto_reply_match',
+            visitorId: session.visitorId,
+          });
           this.send(session, {
             type: 'message',
             messageId: crypto.randomUUID() as MessageId,
@@ -244,6 +292,11 @@ export class ChatRoom extends DurableObject<Env> {
 
         const includeVisitorInfo = !session.telegramConversationStarted;
         session.telegramConversationStarted = true;
+        console.log('[ChatRoom Debug]', {
+          event: 'telegram_notification_scheduled',
+          visitorId: session.visitorId,
+          messagePreview: message.content.slice(0, 80),
+        });
         this.ctx.waitUntil(
           this.telegramService.notifyCustomerMessage(
             session.visitorId,
