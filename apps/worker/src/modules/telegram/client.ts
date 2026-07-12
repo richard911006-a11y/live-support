@@ -40,7 +40,9 @@ export class TelegramApiClient {
     private readonly botToken: string,
     options: TelegramApiClientOptions = {},
   ) {
-    this.fetchImplementation = options.fetchImplementation ?? fetch;
+    this.fetchImplementation =
+      options.fetchImplementation ??
+      globalThis.fetch.bind(globalThis);
     this.apiBaseUrl = (options.apiBaseUrl ?? TELEGRAM_API_URL).replace(/\/$/, '');
   }
 
