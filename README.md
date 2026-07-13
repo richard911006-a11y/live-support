@@ -240,6 +240,48 @@ Pages 继续由 Cloudflare Pages 的 GitHub 集成自动部署。其它分支和
 
 配置完成后，正常 Push 到 `main` 不再需要手工执行 `wrangler deploy`。只有 GitHub Actions 故障、紧急回滚或需要部署未提交到 `main` 的代码时，才需要手动部署。
 
+## GitHub Actions Secrets
+
+如果希望 GitHub Push 后自动部署 Cloudflare Worker，需要在 GitHub Repository 中配置 Repository Secrets：
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
+配置位置：GitHub Repository → Settings → Secrets and variables → Actions → New repository secret。
+
+### `CLOUDFLARE_API_TOKEN`
+
+用途：GitHub Actions 使用 Wrangler 自动部署 Worker。
+
+获取方式：Cloudflare Dashboard → My Profile → API Tokens → Create Token。
+
+推荐按最小权限原则配置：
+
+- Account → Workers Scripts → Edit
+- 如果还需要部署 Worker Route，可增加 Zone → Workers Routes → Edit
+
+不需要 Global API Key，也不要将 API Token 写入代码、Workflow 或提交到 Git。
+
+### `CLOUDFLARE_ACCOUNT_ID`
+
+用途：指定 Worker 要部署到哪个 Cloudflare Account。
+
+获取方式：Cloudflare Dashboard 首页右侧的 Account ID。
+
+Secrets 不会进入 Git 仓库。Fork 项目后，每位开发者都必须配置自己的 Secrets；项目保持完全 Self-hosted，部署资源和凭据均属于使用者自己的 Cloudflare 账户。
+
+### GitHub Actions 常见问题
+
+**Q：GitHub Actions 报错 `In a non-interactive environment, it's necessary to set a CLOUDFLARE_API_TOKEN...`，怎么办？**
+
+**A：** 这通常表示 Repository Secrets 未配置、名称拼写错误，或 Secret 配置在错误的 Repository/Environment 中。请依次检查：
+
+1. 确认 Secret 名称完全为 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`，大小写不能改变。
+2. 确认配置位置是当前 GitHub Repository 的 Settings → Secrets and variables → Actions。
+3. 确认 Secret 类型为 Repository secret，并检查是否误配置为其它 Environment secret。
+4. 确认 Token 未过期、未被撤销，并包含 Account → Workers Scripts → Edit 权限。
+5. 重新执行失败的 Workflow；不要把 Token 写入日志或提交到 Git。
+
 ## 自托管项目架构
 
 本项目是开源、自托管的 Live Support 平台。每位使用者可以 Fork 仓库，部署到自己的 Cloudflare 账户，配置自己的 Telegram Bot，再把 Widget 嵌入任意网站。

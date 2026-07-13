@@ -129,6 +129,48 @@ GitHub Actions 需要配置：
 
 Pages 继续使用 Cloudflare Pages 的 GitHub 集成部署。其它分支只执行 CI，不部署 Worker。
 
+## GitHub Actions Secrets
+
+如果希望 GitHub Push 后自动部署 Cloudflare Worker，需要在 GitHub Repository 中配置以下 Repository Secrets：
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
+配置位置：GitHub Repository → Settings → Secrets and variables → Actions → New repository secret。
+
+### `CLOUDFLARE_API_TOKEN`
+
+用途：GitHub Actions 使用 Wrangler 自动部署 Worker。
+
+获取方式：Cloudflare Dashboard → My Profile → API Tokens → Create Token。
+
+推荐权限（最小权限原则）：
+
+- Account → Workers Scripts → Edit
+- 如果需要部署 Worker Route，可增加 Zone → Workers Routes → Edit
+
+不要使用 Global API Key。API Token 不应提交到 Git、写入 Workflow 或出现在构建日志中。
+
+### `CLOUDFLARE_ACCOUNT_ID`
+
+用途：指定部署到哪个 Cloudflare Account。
+
+获取方式：Cloudflare Dashboard 首页右侧的 Account ID。
+
+Secrets 不会进入 Git 仓库。Fork 项目后，每位开发者都应配置自己的 Secrets。项目保持完全 Self-hosted，Cloudflare 资源和凭据均由使用者自行管理。
+
+### 常见问题
+
+**Q：GitHub Actions 报错：`In a non-interactive environment, it's necessary to set a CLOUDFLARE_API_TOKEN...`**
+
+**A：** 说明 Repository Secrets 未配置或名称错误。请按以下步骤排查：
+
+1. 确认当前 Repository 的 Settings → Secrets and variables → Actions 中存在 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`。
+2. 确认名称大小写和下划线完全一致，没有多余空格。
+3. 确认 Secret 配置在当前 Repository，而不是个人账户、其它 Repository 或未被 Workflow 使用的 Environment 中。
+4. 确认 API Token 未过期或撤销，并包含 Account → Workers Scripts → Edit 权限。
+5. 修正后重新运行 Workflow；不要将 Token 直接写入 YAML、代码或日志。
+
 ## 8. 升级流程
 
 ```bash
