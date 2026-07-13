@@ -4,6 +4,7 @@ type Brand<Value, Name extends string> = Value & {
 
 export type VisitorId = Brand<string, 'VisitorId'>;
 export type SessionId = Brand<string, 'SessionId'>;
+export type ConnectionId = Brand<string, 'ConnectionId'>;
 export type TelegramChatId = Brand<string, 'TelegramChatId'>;
 export type MessageId = Brand<string, 'MessageId'>;
 export type ImageId = Brand<string, 'ImageId'>;

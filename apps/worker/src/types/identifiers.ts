@@ -1,1 +1,8 @@
-export type { ImageId, MessageId, SessionId, TelegramChatId, VisitorId } from '@live-support/types';
+export type {
+  ConnectionId,
+  ImageId,
+  MessageId,
+  SessionId,
+  TelegramChatId,
+  VisitorId,
+} from '@live-support/types';

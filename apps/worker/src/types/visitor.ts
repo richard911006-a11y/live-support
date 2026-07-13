@@ -3,6 +3,7 @@ import type { VisitorId } from '@live-support/types';
 /** Request metadata captured from Cloudflare and the connecting browser. */
 export interface VisitorInfo {
   readonly visitorId: VisitorId;
+  readonly nickname?: string | undefined;
   readonly website?: string | undefined;
   readonly country?: string | undefined;
   readonly region?: string | undefined;

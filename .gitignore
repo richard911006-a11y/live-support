@@ -19,6 +19,7 @@ coverage/
 # Logs
 *.log
 pnpm-debug.log*
+scripts/*.runtime.mjs
 
 # Editors and operating systems
 .idea/

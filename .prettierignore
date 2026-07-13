@@ -5,4 +5,5 @@ coverage/
 .wrangler/
 pnpm-lock.yaml
 LICENSE
+**/.env.example
 **/worker-configuration.d.ts

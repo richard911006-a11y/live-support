@@ -31,17 +31,25 @@ const HEARTBEAT_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 3;
 const DEFAULT_SESSION_IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const VISITOR_STATE_STORAGE_KEY = 'visitor-state';
 const TELEGRAM_SENDER_ID = 'support' as VisitorId;
+const TOPIC_RETRY_DELAY_MS = 30_000;
 
+/** Session metadata and channel bindings; chat history is deliberately absent. */
 interface PersistedVisitorState {
   readonly visitorId: VisitorId;
   readonly visitorInfo: VisitorInfo;
+  readonly sessionId: SessionId;
   topics: TelegramTopic[];
   readonly createdAt: number;
   lastActivityAt: number;
   conversationStarted: boolean;
 }
 
-/** In-memory Durable Object session coordinator for connected visitors. */
+/**
+ * Real-time Session coordinator.
+ *
+ * ChatRoom owns WebSocket connections, heartbeat handling, and live delivery.
+ * It does not serve as a permanent message store or analytics system.
+ */
 export class ChatRoom extends DurableObject<Env> {
   private readonly sessions = new SessionManager<WebSocket>();
   private readonly heartbeatTimers = new Map<SessionId, ReturnType<typeof setTimeout>>();
@@ -52,6 +60,7 @@ export class ChatRoom extends DurableObject<Env> {
   private readonly sessionIdleTimeoutMs: number;
   private visitorState: PersistedVisitorState | undefined;
   private visitorStatePromise: Promise<PersistedVisitorState> | undefined;
+  private readonly newSessionRequired = new Set<VisitorId>();
 
   public constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -103,7 +112,9 @@ export class ChatRoom extends DurableObject<Env> {
       sessionToken,
       decodeVisitorInfo(request.headers.get(VISITOR_INFO_HEADER), visitorId),
     );
-    this.ctx.waitUntil(this.prepareVisitorState(visitorId, session.visitorInfo, !wasConnected));
+    this.ctx.waitUntil(
+      this.prepareVisitorState(visitorId, session.visitorInfo, session.sessionId, !wasConnected),
+    );
 
     server.addEventListener('close', () => this.onDisconnect(session.sessionId, server));
     server.addEventListener('error', () => {
@@ -165,10 +176,18 @@ export class ChatRoom extends DurableObject<Env> {
     }
   }
 
-  public sendTelegramReply(visitorId: VisitorId, content: string): boolean {
+  public async sendTelegramReply(
+    visitorId: VisitorId,
+    content: string,
+    sessionId?: SessionId,
+  ): Promise<boolean> {
     const session = this.sessions.getSessionByVisitor(visitorId);
 
     if (session === undefined) {
+      return false;
+    }
+
+    if (!(await this.isCurrentSession(visitorId, sessionId))) {
       return false;
     }
 
@@ -187,16 +206,21 @@ export class ChatRoom extends DurableObject<Env> {
     return delivered;
   }
 
-  public sendTelegramImageReply(
+  public async sendTelegramImageReply(
     visitorId: VisitorId,
     imageId: string,
     url: string,
     contentType: ServerImageMessage['contentType'],
     caption?: string,
-  ): boolean {
+    sessionId?: SessionId,
+  ): Promise<boolean> {
     const session = this.sessions.getSessionByVisitor(visitorId);
 
     if (session === undefined) {
+      return false;
+    }
+
+    if (!(await this.isCurrentSession(visitorId, sessionId))) {
       return false;
     }
 
@@ -248,7 +272,12 @@ export class ChatRoom extends DurableObject<Env> {
           return;
         }
 
-        const state = await this.prepareVisitorState(session.visitorId, session.visitorInfo, false);
+        const state = await this.prepareVisitorState(
+          session.visitorId,
+          session.visitorInfo,
+          session.sessionId,
+          false,
+        );
         state.lastActivityAt = Date.now();
         await this.persistVisitorState(state);
         const autoReply = await this.autoReplyService.matchKeyword(message.content);
@@ -278,11 +307,12 @@ export class ChatRoom extends DurableObject<Env> {
         state.conversationStarted = true;
         await this.persistVisitorState(state);
         this.ctx.waitUntil(
-          this.telegramService.notifyCustomerMessage(
+          this.deliverCustomerMessage(
+            state,
             session.visitorId,
             message.content,
+            session.visitorInfo,
             includeVisitorInfo ? session.visitorInfo : undefined,
-            state.topics,
           ),
         );
         return;
@@ -298,7 +328,12 @@ export class ChatRoom extends DurableObject<Env> {
           return;
         }
 
-        const state = await this.prepareVisitorState(session.visitorId, session.visitorInfo, false);
+        const state = await this.prepareVisitorState(
+          session.visitorId,
+          session.visitorInfo,
+          session.sessionId,
+          false,
+        );
         state.lastActivityAt = Date.now();
         await this.persistVisitorState(state);
 
@@ -324,12 +359,13 @@ export class ChatRoom extends DurableObject<Env> {
         state.conversationStarted = true;
         await this.persistVisitorState(state);
         this.ctx.waitUntil(
-          this.telegramService.notifyCustomerImage(
+          this.deliverCustomerImage(
+            state,
             session.visitorId,
             message.url,
             message.caption,
+            session.visitorInfo,
             includeVisitorInfo ? session.visitorInfo : undefined,
-            state.topics,
           ),
         );
         return;
@@ -362,6 +398,7 @@ export class ChatRoom extends DurableObject<Env> {
       const payload = (await request.json()) as {
         type?: unknown;
         visitorId?: unknown;
+        sessionId?: unknown;
         content?: unknown;
         imageId?: unknown;
         url?: unknown;
@@ -387,12 +424,13 @@ export class ChatRoom extends DurableObject<Env> {
         }
 
         return success({
-          delivered: this.sendTelegramImageReply(
+          delivered: await this.sendTelegramImageReply(
             payload.visitorId as VisitorId,
             payload.imageId,
             payload.url,
             payload.contentType as ServerImageMessage['contentType'],
             payload.caption,
+            typeof payload.sessionId === 'string' ? (payload.sessionId as SessionId) : undefined,
           ),
         });
       }
@@ -407,7 +445,11 @@ export class ChatRoom extends DurableObject<Env> {
       }
 
       return success({
-        delivered: this.sendTelegramReply(payload.visitorId as VisitorId, payload.content),
+        delivered: await this.sendTelegramReply(
+          payload.visitorId as VisitorId,
+          payload.content,
+          typeof payload.sessionId === 'string' ? (payload.sessionId as SessionId) : undefined,
+        ),
       });
     } catch {
       return error('Telegram 回复数据无效。', 400);
@@ -420,6 +462,63 @@ export class ChatRoom extends DurableObject<Env> {
     return success({ info: state?.visitorInfo });
   }
 
+  private async deliverCustomerMessage(
+    state: PersistedVisitorState,
+    visitorId: VisitorId,
+    message: string,
+    visitorInfo: VisitorInfo,
+    fallbackVisitorInfo?: VisitorInfo,
+  ): Promise<void> {
+    const topics = await this.telegramService.deliverCustomerMessage(
+      visitorId,
+      message,
+      visitorInfo,
+      state.topics,
+      fallbackVisitorInfo,
+    );
+    await this.updateTopicsAfterDelivery(state, topics);
+  }
+
+  private async deliverCustomerImage(
+    state: PersistedVisitorState,
+    visitorId: VisitorId,
+    url: string,
+    caption: string | undefined,
+    visitorInfo: VisitorInfo,
+    fallbackVisitorInfo?: VisitorInfo,
+  ): Promise<void> {
+    const topics = await this.telegramService.deliverCustomerImage(
+      visitorId,
+      url,
+      caption,
+      visitorInfo,
+      state.topics,
+      fallbackVisitorInfo,
+    );
+    await this.updateTopicsAfterDelivery(state, topics);
+  }
+
+  private async updateTopicsAfterDelivery(
+    state: PersistedVisitorState,
+    topics: readonly TelegramTopic[],
+  ): Promise<void> {
+    if (this.visitorState !== state || topics.length === 0) {
+      return;
+    }
+
+    state.topics = [...topics];
+    await this.persistVisitorState(state);
+  }
+
+  private async isCurrentSession(visitorId: VisitorId, sessionId?: SessionId): Promise<boolean> {
+    if (sessionId === undefined) {
+      return true;
+    }
+
+    const state = await this.loadVisitorState();
+    return state?.visitorId === visitorId && state.sessionId === sessionId;
+  }
+
   public override async alarm(): Promise<void> {
     const state = await this.loadVisitorState();
 
@@ -427,7 +526,31 @@ export class ChatRoom extends DurableObject<Env> {
       return;
     }
 
-    const remaining = state.lastActivityAt + this.sessionIdleTimeoutMs - Date.now();
+    const now = Date.now();
+    const remaining = state.lastActivityAt + this.sessionIdleTimeoutMs - now;
+
+    if (
+      state.topics.length < this.telegramService.configuredAdminChatCount &&
+      remaining > 0 &&
+      this.sessions.getSessionByVisitor(state.visitorId) !== undefined
+    ) {
+      const topics = await this.telegramService.createMissingVisitorTopics(
+        state.visitorId,
+        state.visitorInfo,
+        state.sessionId,
+        state.topics,
+      );
+      if (topics.length > state.topics.length) {
+        state.topics = topics;
+        await this.persistVisitorState(state);
+        if (topics.length >= this.telegramService.configuredAdminChatCount) {
+          return;
+        }
+      }
+
+      await this.ctx.storage.setAlarm(Math.min(now + TOPIC_RETRY_DELAY_MS, now + remaining));
+      return;
+    }
 
     if (remaining > 0) {
       await this.ctx.storage.setAlarm(Date.now() + remaining);
@@ -439,10 +562,9 @@ export class ChatRoom extends DurableObject<Env> {
       await this.telegramService.closeTopics(state.topics);
     }
 
-    state.topics = [];
-    state.conversationStarted = false;
-    state.lastActivityAt = Date.now();
-    await this.persistVisitorState(state);
+    this.visitorState = undefined;
+    this.newSessionRequired.add(state.visitorId);
+    await this.ctx.storage.delete(VISITOR_STATE_STORAGE_KEY);
     await this.ctx.storage.deleteAlarm();
   }
 
@@ -506,6 +628,7 @@ export class ChatRoom extends DurableObject<Env> {
   private prepareVisitorState(
     visitorId: VisitorId,
     visitorInfo: VisitorInfo,
+    sessionId: SessionId,
     reconnect: boolean,
   ): Promise<PersistedVisitorState> {
     if (this.visitorState?.topics.length === 0) {
@@ -522,7 +645,7 @@ export class ChatRoom extends DurableObject<Env> {
       return this.visitorStatePromise;
     }
 
-    const promise = this.loadAndPrepareVisitorState(visitorId, visitorInfo, reconnect);
+    const promise = this.loadAndPrepareVisitorState(visitorId, visitorInfo, sessionId, reconnect);
     this.visitorStatePromise = promise;
     void promise.finally(() => {
       if (this.visitorStatePromise === promise) {
@@ -543,9 +666,23 @@ export class ChatRoom extends DurableObject<Env> {
   private async loadAndPrepareVisitorState(
     visitorId: VisitorId,
     visitorInfo: VisitorInfo,
+    sessionId: SessionId,
     reconnect: boolean,
   ): Promise<PersistedVisitorState> {
     let state = await this.loadVisitorState();
+    if (state !== undefined) {
+      const restoredSessionId = state.sessionId ?? sessionId;
+      state = {
+        ...state,
+        sessionId: restoredSessionId,
+        topics: state.topics.map((topic) => ({
+          ...topic,
+          sessionId: topic.sessionId ?? restoredSessionId,
+        })),
+      };
+      await this.telegramService.persistTopicMappings(state.topics);
+      await this.ctx.storage.put(VISITOR_STATE_STORAGE_KEY, state);
+    }
     const expired =
       state !== undefined && Date.now() - state.lastActivityAt >= this.sessionIdleTimeoutMs;
 
@@ -554,21 +691,38 @@ export class ChatRoom extends DurableObject<Env> {
         await this.telegramService.notifyTopicSystem(state.topics, '🔴 会话结束');
         await this.telegramService.closeTopics(state.topics);
       }
+      this.visitorState = undefined;
+      await this.ctx.storage.delete(VISITOR_STATE_STORAGE_KEY);
       state = undefined;
     }
 
     if (state === undefined || state.visitorId !== visitorId) {
+      const newSessionId =
+        expired || this.newSessionRequired.has(visitorId)
+          ? (crypto.randomUUID() as SessionId)
+          : sessionId;
+      this.newSessionRequired.delete(visitorId);
       state = {
         visitorId,
         visitorInfo,
-        topics: await this.telegramService.createVisitorTopics(visitorId, visitorInfo),
+        sessionId: newSessionId,
+        topics: await this.telegramService.createVisitorTopics(
+          visitorId,
+          visitorInfo,
+          newSessionId,
+        ),
         createdAt: Date.now(),
         lastActivityAt: Date.now(),
         conversationStarted: false,
       };
       await this.persistVisitorState(state);
-    } else if (state.topics.length === 0) {
-      state.topics = await this.telegramService.createVisitorTopics(visitorId, state.visitorInfo);
+    } else if (state.topics.length < this.telegramService.configuredAdminChatCount) {
+      state.topics = await this.telegramService.createMissingVisitorTopics(
+        visitorId,
+        state.visitorInfo,
+        state.sessionId,
+        state.topics,
+      );
       await this.persistVisitorState(state);
     } else if (reconnect) {
       await this.telegramService.notifyTopicSystem(state.topics, '🟡 已重新连接');
@@ -592,7 +746,14 @@ export class ChatRoom extends DurableObject<Env> {
   private async persistVisitorState(state: PersistedVisitorState): Promise<void> {
     this.visitorState = state;
     await this.ctx.storage.put(VISITOR_STATE_STORAGE_KEY, state);
-    await this.ctx.storage.setAlarm(state.lastActivityAt + this.sessionIdleTimeoutMs);
+    const idleDeadline = state.lastActivityAt + this.sessionIdleTimeoutMs;
+    const retryDeadline = Date.now() + TOPIC_RETRY_DELAY_MS;
+    const hasActiveVisitor = this.sessions.getSessionByVisitor(state.visitorId) !== undefined;
+    await this.ctx.storage.setAlarm(
+      state.topics.length < this.telegramService.configuredAdminChatCount && hasActiveVisitor
+        ? Math.min(idleDeadline, retryDeadline)
+        : idleDeadline,
+    );
   }
 
   private async touchVisitorActivity(): Promise<void> {

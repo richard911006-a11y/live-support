@@ -97,6 +97,42 @@ describe('Telegram webhook', () => {
     });
   });
 
+  it('routes a reply from a Topic through the Topic-to-Session mapping', async () => {
+    let forwardedPayload: unknown;
+    const topicIndex = {
+      get: async () => JSON.stringify({ sessionId: 'session-topic', visitorId: 'visitor-topic' }),
+    };
+    const env = {
+      ...createEnv(async (request) => {
+        forwardedPayload = await request.json();
+        return new Response(JSON.stringify({ delivered: true }), { status: 200 });
+      }),
+      CHAT_CONFIG: topicIndex as never,
+    };
+
+    const response = await app.request(
+      '/webhook/telegram',
+      webhookRequest({
+        update_id: 10,
+        message: {
+          message_id: 11,
+          message_thread_id: 42,
+          chat: { id: 100, type: 'supergroup' },
+          text: 'Topic reply',
+        },
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(forwardedPayload).toEqual({
+      content: 'Topic reply',
+      sessionId: 'session-topic',
+      type: 'message',
+      visitorId: 'visitor-topic',
+    });
+  });
+
   it('ignores commands and rejects invalid webhook secrets', async () => {
     const commandResponse = await app.request(
       '/telegram/webhook',
@@ -126,6 +162,29 @@ describe('Telegram webhook', () => {
       read: false,
     });
     expect(invalidSecretResponse.status).toBe(401);
+  });
+
+  it('does not guess a Session when a Topic binding is missing', async () => {
+    const response = await app.request(
+      '/telegram/webhook',
+      webhookRequest({
+        update_id: 5,
+        message: {
+          message_id: 6,
+          message_thread_id: 999,
+          chat: { id: 100, type: 'supergroup' },
+          text: 'Unmapped reply',
+          reply_to_message: {
+            message_id: 1,
+            chat: { id: 100, type: 'supergroup' },
+            text: formatCustomerMessage('visitor-123' as VisitorId, 'Hello'),
+          },
+        },
+      }),
+      createEnv(async () => new Response(JSON.stringify({ delivered: true }), { status: 200 })),
+    );
+
+    await expect(response.json()).resolves.toEqual({ ok: true, ignored: true, read: false });
   });
 
   it('recovers visitor metadata from an image caption', () => {

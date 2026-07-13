@@ -1,10 +1,17 @@
 import { createDefaultVisitorInfo } from '../../utils/visitor-info';
 import type { SessionId, VisitorId, VisitorInfo } from '../../types';
 
+/** Transport-only socket contract kept separate from the Session domain model. */
 export interface SessionSocket {
   close(code?: number, reason?: string): void;
 }
 
+/**
+ * Runtime projection for one connected visitor.
+ *
+ * This object owns connection and heartbeat state only. Durable Session
+ * metadata is maintained separately by ChatRoom storage and domain contracts.
+ */
 export interface ChatSession<Socket extends SessionSocket = SessionSocket> {
   visitorId: VisitorId;
   sessionToken: string;
@@ -13,6 +20,7 @@ export interface ChatSession<Socket extends SessionSocket = SessionSocket> {
   connectedAt: number;
   lastHeartbeat: number;
   visitorInfo: VisitorInfo;
+  /** @deprecated Kept for compatibility; domain conversation state is persisted by ChatRoom. */
   telegramConversationStarted: boolean;
 }
 

@@ -14,7 +14,9 @@ describe('server-issued session identity', () => {
 
   it('rejects a tampered token', async () => {
     const identity = await createSessionIdentity('test-secret');
-    const tampered = `${identity.token.slice(0, -1)}x`;
+    const [version, payload, signature] = identity.token.split('.');
+    const replacement = signature?.startsWith('A') ? 'B' : 'A';
+    const tampered = `${version}.${payload}.${replacement}${signature?.slice(1) ?? ''}`;
 
     await expect(verifySessionToken(tampered, 'test-secret')).resolves.toBeUndefined();
   });

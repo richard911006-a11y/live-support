@@ -19,7 +19,9 @@
     "lint": "eslint . --max-warnings 0",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "deploy": "turbo run deploy --filter=@live-support/worker",
+    "doctor": "node scripts/run-ts.mjs scripts/doctor.ts",
+    "setup": "node scripts/run-ts.mjs scripts/setup.ts",
+    "deploy": "node scripts/run-ts.mjs scripts/deploy.ts",
     "deploy:pages": "pnpm --filter @live-support/widget pages:deploy"
   },
   "devDependencies": {

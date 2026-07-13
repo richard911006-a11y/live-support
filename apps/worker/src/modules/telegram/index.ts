@@ -3,11 +3,15 @@ export type { TelegramApiClientOptions, TelegramTopicOptions } from './client';
 export {
   formatCustomerMessage,
   formatCustomerImageCaption,
+  findTopicForVisitor,
+  findTopicForSession,
+  formatTopicName,
   isConfiguredAdminChat,
   parseAdminChatIds,
   TelegramService,
   type TelegramServiceOptions,
   type TelegramTopic,
+  type TelegramTopicBinding,
 } from './service';
 export type {
   SendChatActionParams,

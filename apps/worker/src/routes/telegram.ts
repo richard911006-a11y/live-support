@@ -11,6 +11,7 @@ import { error, success } from '../http/responses';
 import {
   isConfiguredAdminChat,
   TelegramService,
+  type TelegramTopicBinding,
   type TelegramUpdate,
   type TelegramUpdateMessage,
 } from '../modules/telegram';
@@ -48,13 +49,17 @@ async function handleWebhook(context: Context<{ Bindings: Env }>): Promise<Respo
     const telegramService = new TelegramService(context.env);
     const messageThreadId =
       message.message_thread_id ?? message.reply_to_message?.message_thread_id;
-    const topicVisitorId =
+    const topicBinding: TelegramTopicBinding | undefined =
       messageThreadId === undefined
         ? undefined
-        : await telegramService.lookupVisitorByTopic(
+        : await telegramService.lookupTopicBinding(
             String(message.chat.id) as TelegramChatId,
             messageThreadId,
           );
+    const topicVisitorId = topicBinding?.visitorId;
+    if (messageThreadId !== undefined && topicBinding === undefined) {
+      return success({ ok: true, ignored: true, read: false });
+    }
     const visitorId = topicVisitorId ?? extractVisitorId(message.reply_to_message);
 
     if (message.text !== undefined && isInfoCommand(message.text)) {
@@ -74,7 +79,7 @@ async function handleWebhook(context: Context<{ Bindings: Env }>): Promise<Respo
         return success({ ok: true, ignored: true, read: false });
       }
 
-      if (message.reply_to_message === undefined && topicVisitorId === undefined) {
+      if (message.reply_to_message === undefined && topicBinding === undefined) {
         return success({ ok: true, ignored: true, read: false });
       }
 
@@ -82,6 +87,7 @@ async function handleWebhook(context: Context<{ Bindings: Env }>): Promise<Respo
         type: 'message',
         visitorId,
         content: message.text,
+        ...(topicBinding === undefined ? {} : { sessionId: topicBinding.sessionId }),
       });
     }
 
@@ -110,6 +116,7 @@ async function handleWebhook(context: Context<{ Bindings: Env }>): Promise<Respo
         imageId: image.imageId,
         url: image.url,
         contentType,
+        ...(topicBinding === undefined ? {} : { sessionId: topicBinding.sessionId }),
       };
 
       return forwardReply(
@@ -129,7 +136,7 @@ async function handleWebhook(context: Context<{ Bindings: Env }>): Promise<Respo
 }
 
 type ReplyPayload =
-  | { type: 'message'; visitorId: VisitorId; content: string }
+  | { type: 'message'; visitorId: VisitorId; content: string; sessionId?: string }
   | {
       type: 'image';
       visitorId: VisitorId;
@@ -137,6 +144,7 @@ type ReplyPayload =
       url: string;
       contentType: SupportedImageMimeType;
       caption?: string;
+      sessionId?: string;
     };
 
 async function forwardInfo(

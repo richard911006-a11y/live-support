@@ -62,6 +62,7 @@ export function decodeVisitorInfo(value: string | null, visitorId: VisitorId): V
 
     return {
       ...fallback,
+      nickname: readString(record.nickname),
       website: readString(record.website),
       country: readString(record.country),
       region: readString(record.region),

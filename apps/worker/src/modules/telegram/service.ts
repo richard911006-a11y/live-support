@@ -1,24 +1,54 @@
-import type { TelegramChatId, VisitorId } from '@live-support/types';
+import type { SessionId, TelegramChatId, VisitorId } from '@live-support/types';
 
 import type { Env } from '../../types/env';
 import type { VisitorInfo } from '../../types';
 import { logger as defaultLogger, type Logger } from '../../utils/logger';
 import { TelegramApiClient } from './client';
+import { TelegramApiError } from './client';
 import type { TelegramApiClientOptions } from './client';
 
 const TOPIC_INDEX_PREFIX = 'telegram-topic:';
+const SESSION_INDEX_PREFIX = 'telegram-session:';
 const TOPIC_INDEX_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 export interface TelegramTopic {
   readonly chatId: TelegramChatId;
   readonly messageThreadId: number;
+  readonly sessionId: SessionId;
   readonly visitorId: VisitorId;
   readonly createdAt: number;
+}
+
+export interface TelegramTopicBinding {
+  readonly sessionId: SessionId;
+  readonly visitorId: VisitorId;
+}
+
+/** Resolves the forward Session/Visitor-to-Topic binding kept by ChatRoom. */
+export function findTopicForVisitor(
+  topics: readonly TelegramTopic[],
+  visitorId: VisitorId,
+  chatId?: TelegramChatId,
+): TelegramTopic | undefined {
+  return topics.find(
+    (topic) => topic.visitorId === visitorId && (chatId === undefined || topic.chatId === chatId),
+  );
+}
+
+export function findTopicForSession(
+  topics: readonly TelegramTopic[],
+  sessionId: SessionId,
+  chatId?: TelegramChatId,
+): TelegramTopic | undefined {
+  return topics.find(
+    (topic) => topic.sessionId === sessionId && (chatId === undefined || topic.chatId === chatId),
+  );
 }
 
 interface TopicIndexStore {
   get(key: string, type: 'text'): Promise<string | null>;
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  delete?(key: string): Promise<void>;
 }
 
 export interface TelegramServiceOptions extends TelegramApiClientOptions {
@@ -49,6 +79,16 @@ export function formatVisitorLabel(visitorId: VisitorId): string {
   }
 
   return `#${1000 + (hash % 9000)}`;
+}
+
+/** Builds a stable, privacy-safe Telegram topic title for one Session. */
+export function formatTopicName(visitorInfo: VisitorInfo): string {
+  const website = sanitizeTopicPart(visitorInfo.website) ?? 'live-support';
+  const nickname =
+    sanitizeTopicPart(visitorInfo.nickname) ??
+    `visitor-${formatVisitorLabel(visitorInfo.visitorId).slice(1)}`;
+
+  return `${website}｜${nickname}`.slice(0, 128);
 }
 
 export function formatCustomerMessage(
@@ -150,14 +190,45 @@ export class TelegramService {
   public async createVisitorTopics(
     visitorId: VisitorId,
     visitorInfo: VisitorInfo,
+    sessionId: SessionId = visitorId as unknown as SessionId,
   ): Promise<TelegramTopic[]> {
-    if (!this.enabled) {
+    return this.createTopicsForChats(visitorId, visitorInfo, sessionId, this.adminChatIds);
+  }
+
+  public async createMissingVisitorTopics(
+    visitorId: VisitorId,
+    visitorInfo: VisitorInfo,
+    sessionId: SessionId,
+    existingTopics: readonly TelegramTopic[],
+  ): Promise<TelegramTopic[]> {
+    const existingChats = new Set(existingTopics.map((topic) => topic.chatId));
+    const missingChats = this.adminChatIds.filter((chatId) => !existingChats.has(chatId));
+    const additions = await this.createTopicsForChats(
+      visitorId,
+      visitorInfo,
+      sessionId,
+      missingChats,
+    );
+    return [...existingTopics, ...additions];
+  }
+
+  public get configuredAdminChatCount(): number {
+    return this.adminChatIds.length;
+  }
+
+  private async createTopicsForChats(
+    visitorId: VisitorId,
+    visitorInfo: VisitorInfo,
+    sessionId: SessionId,
+    chatIds: readonly TelegramChatId[],
+  ): Promise<TelegramTopic[]> {
+    if (!this.enabled || chatIds.length === 0) {
       return [];
     }
 
-    const topicName = `访客 ${formatVisitorLabel(visitorId)}`;
+    const topicName = formatTopicName(visitorInfo);
     const deliveries = await Promise.allSettled(
-      this.adminChatIds.map(async (chatId): Promise<TelegramTopic> => {
+      chatIds.map(async (chatId): Promise<TelegramTopic> => {
         const topicMessage = await this.client.createForumTopic(chatId, topicName);
         const messageThreadId = topicMessage.message_thread_id;
 
@@ -168,6 +239,7 @@ export class TelegramService {
         const topic: TelegramTopic = {
           chatId,
           messageThreadId,
+          sessionId,
           visitorId,
           createdAt: Date.now(),
         };
@@ -195,24 +267,53 @@ export class TelegramService {
     });
   }
 
-  public async lookupVisitorByTopic(
+  public async lookupTopicBinding(
     chatId: TelegramChatId,
     messageThreadId: number,
-  ): Promise<VisitorId | undefined> {
+  ): Promise<TelegramTopicBinding | undefined> {
     if (this.topicIndex === undefined) {
       return undefined;
     }
 
     try {
-      const visitorId = await this.topicIndex.get(
-        this.topicIndexKey(chatId, messageThreadId),
-        'text',
-      );
-      return visitorId === null || visitorId.length === 0 ? undefined : (visitorId as VisitorId);
+      const value = await this.topicIndex.get(this.topicIndexKey(chatId, messageThreadId), 'text');
+      if (value === null || value.length === 0) {
+        return undefined;
+      }
+
+      try {
+        const binding = JSON.parse(value) as Partial<TelegramTopicBinding>;
+        if (typeof binding.sessionId === 'string' && binding.sessionId.length > 0) {
+          const visitorId =
+            typeof binding.visitorId === 'string' && binding.visitorId.length > 0
+              ? binding.visitorId
+              : await this.topicIndex.get(
+                  this.sessionIndexKey(binding.sessionId as SessionId),
+                  'text',
+                );
+          if (visitorId !== null && visitorId !== undefined && visitorId.length > 0) {
+            return { sessionId: binding.sessionId as SessionId, visitorId: visitorId as VisitorId };
+          }
+        }
+      } catch {
+        // Legacy indexes stored only visitorId; keep them readable while they migrate.
+      }
+
+      return {
+        sessionId: value as unknown as SessionId,
+        visitorId: value as VisitorId,
+      };
     } catch (cause) {
       this.logger.error('Telegram topic lookup failed.', cause);
       return undefined;
     }
+  }
+
+  public async lookupVisitorByTopic(
+    chatId: TelegramChatId,
+    messageThreadId: number,
+  ): Promise<VisitorId | undefined> {
+    return (await this.lookupTopicBinding(chatId, messageThreadId))?.visitorId;
   }
 
   public async sendTopicInfo(
@@ -235,28 +336,45 @@ export class TelegramService {
     );
   }
 
+  public async persistTopicMappings(topics: readonly TelegramTopic[]): Promise<void> {
+    await Promise.all(topics.map((topic) => this.saveTopicMapping(topic)));
+  }
+
   public async notifyCustomerMessage(
     visitorId: VisitorId,
     message: string,
     visitorInfo?: VisitorInfo,
     topics?: readonly TelegramTopic[],
   ): Promise<void> {
+    await this.deliverCustomerMessage(visitorId, message, visitorInfo, topics, visitorInfo);
+  }
+
+  public async deliverCustomerMessage(
+    visitorId: VisitorId,
+    message: string,
+    visitorInfo?: VisitorInfo,
+    topics?: readonly TelegramTopic[],
+    fallbackVisitorInfo?: VisitorInfo,
+  ): Promise<readonly TelegramTopic[]> {
     if (!this.enabled) {
-      return;
+      return topics ?? [];
     }
 
     if (topics !== undefined && topics.length > 0) {
-      await this.deliverTopics(topics, (topic) =>
+      return this.deliverTopicMessageWithRecovery(topics, visitorInfo, (topic) =>
         this.client.sendMessage(topic.chatId, `用户：${message}`, {
           messageThreadId: topic.messageThreadId,
         }),
       );
-      return;
     }
 
     await this.deliverAdmins((chatId) =>
-      this.client.sendMessage(chatId, formatCustomerMessage(visitorId, message, visitorInfo)),
+      this.client.sendMessage(
+        chatId,
+        formatCustomerMessage(visitorId, message, fallbackVisitorInfo ?? visitorInfo),
+      ),
     );
+    return [];
   }
 
   public async notifyCustomerImage(
@@ -266,26 +384,37 @@ export class TelegramService {
     visitorInfo?: VisitorInfo,
     topics?: readonly TelegramTopic[],
   ): Promise<void> {
+    await this.deliverCustomerImage(visitorId, url, caption, visitorInfo, topics, visitorInfo);
+  }
+
+  public async deliverCustomerImage(
+    visitorId: VisitorId,
+    url: string,
+    caption?: string,
+    visitorInfo?: VisitorInfo,
+    topics?: readonly TelegramTopic[],
+    fallbackVisitorInfo?: VisitorInfo,
+  ): Promise<readonly TelegramTopic[]> {
     if (!this.enabled) {
-      return;
+      return topics ?? [];
     }
 
     if (topics !== undefined && topics.length > 0) {
-      await this.deliverTopics(topics, (topic) =>
+      return this.deliverTopicMessageWithRecovery(topics, visitorInfo, (topic) =>
         this.client.sendPhoto(topic.chatId, url, `访客 ${formatVisitorLabel(visitorId)}\n图片`, {
           messageThreadId: topic.messageThreadId,
         }),
       );
-      return;
     }
 
     await this.deliverAdmins((chatId) =>
       this.client.sendPhoto(
         chatId,
         url,
-        formatCustomerImageCaption(visitorId, caption, visitorInfo),
+        formatCustomerImageCaption(visitorId, caption, fallbackVisitorInfo ?? visitorInfo),
       ),
     );
+    return [];
   }
 
   public async downloadImage(fileId: string): Promise<{ blob: Blob; contentType: string }> {
@@ -309,9 +438,12 @@ export class TelegramService {
     try {
       await this.topicIndex.put(
         this.topicIndexKey(topic.chatId, topic.messageThreadId),
-        topic.visitorId,
+        JSON.stringify({ sessionId: topic.sessionId }),
         { expirationTtl: TOPIC_INDEX_TTL_SECONDS },
       );
+      await this.topicIndex.put(this.sessionIndexKey(topic.sessionId), topic.visitorId, {
+        expirationTtl: TOPIC_INDEX_TTL_SECONDS,
+      });
     } catch (cause) {
       this.logger.error('Telegram topic mapping could not be stored.', cause);
     }
@@ -319,6 +451,22 @@ export class TelegramService {
 
   private topicIndexKey(chatId: TelegramChatId, messageThreadId: number): string {
     return `${TOPIC_INDEX_PREFIX}${chatId}:${messageThreadId}`;
+  }
+
+  private sessionIndexKey(sessionId: SessionId): string {
+    return `${SESSION_INDEX_PREFIX}${sessionId}`;
+  }
+
+  private async deleteTopicMapping(topic: TelegramTopic): Promise<void> {
+    if (this.topicIndex?.delete === undefined) {
+      return;
+    }
+
+    try {
+      await this.topicIndex.delete(this.topicIndexKey(topic.chatId, topic.messageThreadId));
+    } catch (cause) {
+      this.logger.error('Telegram stale topic mapping could not be removed.', cause);
+    }
   }
 
   private async deliverAdmins(send: (chatId: TelegramChatId) => Promise<unknown>): Promise<void> {
@@ -351,6 +499,88 @@ export class TelegramService {
       );
     }
   }
+
+  private async deliverTopicMessageWithRecovery(
+    topics: readonly TelegramTopic[],
+    visitorInfo: VisitorInfo | undefined,
+    send: (topic: TelegramTopic) => Promise<unknown>,
+  ): Promise<readonly TelegramTopic[]> {
+    return Promise.all(
+      topics.map(async (topic) => {
+        try {
+          await send(topic);
+          return topic;
+        } catch (cause) {
+          if (!isInvalidTopicError(cause) || visitorInfo === undefined) {
+            this.logger.error('Telegram topic delivery failed.', cause);
+            return topic;
+          }
+
+          const replacement = await this.recreateTopic(topic, visitorInfo);
+          if (replacement === undefined) {
+            return topic;
+          }
+
+          try {
+            await send(replacement);
+          } catch (replacementCause) {
+            this.logger.error('Telegram replacement topic delivery failed.', replacementCause);
+          }
+          return replacement;
+        }
+      }),
+    );
+  }
+
+  private async recreateTopic(
+    previousTopic: TelegramTopic,
+    visitorInfo: VisitorInfo,
+  ): Promise<TelegramTopic | undefined> {
+    try {
+      const topicMessage = await this.client.createForumTopic(
+        previousTopic.chatId,
+        formatTopicName(visitorInfo),
+      );
+      const messageThreadId = topicMessage.message_thread_id;
+      if (messageThreadId === undefined) {
+        throw new Error('Telegram did not return a replacement forum topic id.');
+      }
+
+      const replacement: TelegramTopic = {
+        ...previousTopic,
+        messageThreadId,
+        createdAt: Date.now(),
+      };
+      await this.deleteTopicMapping(previousTopic);
+      await this.saveTopicMapping(replacement);
+      await this.client.sendMessage(
+        replacement.chatId,
+        `🟡 会话已恢复\n访客 ${formatVisitorLabel(visitorInfo.visitorId)}`,
+        { messageThreadId },
+      );
+      this.logger.warn('Telegram topic was recreated after an invalid thread.', {
+        chatId: replacement.chatId,
+        previousThreadId: previousTopic.messageThreadId,
+        messageThreadId,
+      });
+      return replacement;
+    } catch (cause) {
+      this.logger.error('Telegram topic recreation failed.', cause);
+      return undefined;
+    }
+  }
+}
+
+function isInvalidTopicError(cause: unknown): boolean {
+  if (!(cause instanceof TelegramApiError)) {
+    return false;
+  }
+
+  if (cause.errorCode === 400 || cause.status === 400) {
+    return true;
+  }
+
+  return /thread|topic|message to be replied|not found/iu.test(cause.message);
 }
 
 function formatNewVisitorMessage(info: VisitorInfo): string {
@@ -441,4 +671,12 @@ function inferImageContentType(filePath: string): string | undefined {
         : extension === 'webp'
           ? 'image/webp'
           : undefined;
+}
+
+function sanitizeTopicPart(value: string | undefined): string | undefined {
+  const normalized = value
+    ?.replace(/[\r\n｜|]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  return normalized === undefined || normalized.length === 0 ? undefined : normalized;
 }
