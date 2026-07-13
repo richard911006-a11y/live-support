@@ -90,9 +90,14 @@ export function ChatWidget({ connection, title = '在线客服' }: ChatWidgetPro
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | undefined>(undefined);
+  const workerBaseUrl = connection?.baseUrl ?? import.meta.env.VITE_WORKER_BASE_URL?.trim();
 
   if (clientRef.current === null) {
-    clientRef.current = new WebSocketClient({ ...(connection ?? {}), autoConnect: false });
+    clientRef.current = new WebSocketClient({
+      ...(connection ?? {}),
+      ...(workerBaseUrl === undefined ? {} : { baseUrl: workerBaseUrl }),
+      autoConnect: false,
+    });
   }
 
   const client = clientRef.current;
@@ -255,7 +260,7 @@ export function ChatWidget({ connection, title = '在线客服' }: ChatWidgetPro
     try {
       const image = await uploadImage(
         file,
-        connection?.baseUrl === undefined ? {} : { baseUrl: connection.baseUrl },
+        workerBaseUrl === undefined ? {} : { baseUrl: workerBaseUrl },
       );
       const localMessage = createLocalImageMessage(image);
 
