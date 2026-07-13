@@ -18,6 +18,12 @@ export const imageRoutes = new Hono<{ Bindings: Env }>()
         .map((value) => value.trim())
         .filter((value) => value.length > 0) ?? [];
 
+    if (context.req.method === 'OPTIONS') {
+      context.res = context.body(null, 204);
+    } else {
+      await next();
+    }
+
     if (origin !== undefined && allowedOrigins.includes(origin)) {
       context.header('access-control-allow-origin', origin);
       context.header('access-control-allow-methods', 'GET, POST, OPTIONS');
@@ -25,11 +31,7 @@ export const imageRoutes = new Hono<{ Bindings: Env }>()
       context.header('vary', 'Origin');
     }
 
-    if (context.req.method === 'OPTIONS') {
-      return context.body(null, 204);
-    }
-
-    return next();
+    return context.res;
   })
   .post('/images', uploadImage)
   .post('/images/upload', uploadImage)

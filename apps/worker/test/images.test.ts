@@ -96,6 +96,44 @@ describe('R2 image uploads', () => {
     });
   });
 
+  it('adds matching CORS headers to image responses and preflight responses', async () => {
+    const bucket = { put: async () => undefined };
+    const origin = 'https://widget.example';
+    const env = { ...createEnv(bucket), PUBLIC_WIDGET_ORIGINS: origin };
+    const form = new FormData();
+    form.append('file', new File(['png data'], 'photo.png', { type: 'image/png' }));
+
+    const response = await app.request(
+      '/images',
+      { method: 'POST', headers: { Origin: origin }, body: form },
+      env,
+    );
+    const preflight = await app.request(
+      '/images',
+      {
+        method: 'OPTIONS',
+        headers: { Origin: origin, 'Access-Control-Request-Method': 'POST' },
+      },
+      env,
+    );
+    const invalid = await app.request(
+      '/images',
+      { method: 'POST', headers: { Origin: origin }, body: new FormData() },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(preflight.status).toBe(204);
+    expect(invalid.status).toBe(400);
+
+    for (const result of [response, preflight, invalid]) {
+      expect(result.headers.get('access-control-allow-origin')).toBe(origin);
+      expect(result.headers.get('access-control-allow-methods')).toBe('GET, POST, OPTIONS');
+      expect(result.headers.get('access-control-allow-headers')).toBe('content-type');
+      expect(result.headers.get('vary')).toBe('Origin');
+    }
+  });
+
   it('provides a reusable browser upload helper', async () => {
     const file = new Blob(['webp data'], { type: 'image/webp' });
     let requestBody: BodyInit | null | undefined;
@@ -130,6 +168,47 @@ describe('R2 image uploads', () => {
     expect(requestBody).toBeInstanceOf(FormData);
     expect(attempts).toBe(2);
     expect(result.url).toBe('https://support.example/images/image-1.webp');
+  });
+
+  it('uses the global fetch context when no implementation is provided', async () => {
+    const originalFetch = globalThis.fetch;
+    let calledWithGlobalThis = false;
+
+    globalThis.fetch = function fetchWithContext(this: typeof globalThis, input, init) {
+      void input;
+      void init;
+
+      if (this !== globalThis) {
+        throw new TypeError('Illegal invocation');
+      }
+
+      calledWithGlobalThis = true;
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            image: {
+              imageId: 'image-2',
+              key: 'image-2.png',
+              url: 'https://support.example/images/image-2.png',
+              contentType: 'image/png',
+              size: 3,
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+    } as typeof fetch;
+
+    try {
+      const result = await uploadImage(new Blob(['png'], { type: 'image/png' }), {
+        baseUrl: 'https://support.example',
+      });
+
+      expect(calledWithGlobalThis).toBe(true);
+      expect(result.imageId).toBe('image-2');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it('reports browser validation failures without making a request', async () => {
