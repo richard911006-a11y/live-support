@@ -108,14 +108,14 @@ pnpm --filter @live-support/worker exec wrangler deploy --dry-run --env producti
 3. 在群组设置中开启 **Forum Topics**。
 4. 将 Bot 加入群组，授予发送消息、读取消息以及创建、管理和关闭 Topic 所需的管理员权限。
 5. 在群组中发送一条消息。
-6. 确认本地环境中可读取 `TELEGRAM_WEBHOOK_SECRET`（也可为管理接口单独设置可选的 `TELEGRAM_SETUP_SECRET`），并设置 Worker 地址（`WORKER_BASE_URL`、`VITE_WORKER_BASE_URL`，或命令行 `--url`）。
+6. 工具会优先读取 `WORKER_BASE_URL`、`LIVE_SUPPORT_WORKER_URL`，其次读取 `wrangler.jsonc`；只有无法确定时才询问 Worker URL。确认本地环境中可读取 `TELEGRAM_WEBHOOK_SECRET`（也可为管理接口单独设置可选的 `TELEGRAM_SETUP_SECRET`）。
 7. 在仓库根目录运行：
 
    ```bash
    pnpm telegram:setup
    ```
 
-8. 在群组发送消息后，Worker 会缓存聊天信息。工具只显示 `supergroup + Forum Topics`；如果存在多个可用群组，会列出编号供选择，直接回车默认选择第一个。选择后会询问是否写入 `apps/worker/.dev.vars`，只有输入 `Y` 才会写入；其它输入只输出 `TELEGRAM_CHAT_ID`。
+8. 在群组发送消息后，Worker 会缓存聊天信息。工具只显示 `supergroup + Forum Topics`；如果存在多个可用群组，会列出编号供选择，直接回车默认选择第一个。选择后会询问是否自动更新 Cloudflare Worker 环境变量。输入 `Y` 且本机 Wrangler 已登录时会更新 production Worker，成功后请重新部署；无法自动更新时会输出可复制的 `TELEGRAM_CHAT_ID` 配置。
 
 该命令使用受 `TELEGRAM_SETUP_SECRET` 或 `TELEGRAM_WEBHOOK_SECRET` 保护的 Worker 管理接口，不调用 `getUpdates`，也不要求用户查看 Cloudflare 日志。
 

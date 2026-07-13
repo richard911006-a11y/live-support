@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +22,7 @@ interface RecentChat {
 type EnvValues = Readonly<Record<string, string>>;
 
 const rootDir = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const workerVarsPath = resolve(rootDir, 'apps', 'worker', '.dev.vars');
+const workerDir = resolve(rootDir, 'apps', 'worker');
 const fetchImplementation = globalThis.fetch.bind(globalThis);
 
 function loadEnvFile(path: string, values: Record<string, string>): void {
@@ -77,11 +78,53 @@ function getArgument(name: string): string | undefined {
 
 function getWorkerUrl(env: EnvValues): string | undefined {
   return (
-    getArgument('--url') ??
-    getValue('LIVE_SUPPORT_WORKER_URL', env) ??
     getValue('WORKER_BASE_URL', env) ??
-    getValue('VITE_WORKER_BASE_URL', env)
+    getValue('LIVE_SUPPORT_WORKER_URL', env) ??
+    getValue('VITE_WORKER_BASE_URL', env) ??
+    readWranglerWorkerUrl() ??
+    getArgument('--url')
   );
+}
+
+function readWranglerWorkerUrl(): string | undefined {
+  const configPath = resolve(workerDir, 'wrangler.jsonc');
+  if (!existsSync(configPath)) {
+    return undefined;
+  }
+
+  const config = readFileSync(configPath, 'utf8');
+  const match = /"(?:WORKER_BASE_URL|LIVE_SUPPORT_WORKER_URL)"\s*:\s*"([^"]+)"/u.exec(config);
+  return match?.[1]?.trim() || undefined;
+}
+
+function isValidWorkerUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+async function askWorkerUrl(): Promise<string | undefined> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return undefined;
+  }
+
+  const readline = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    while (true) {
+      const answer = (
+        await readline.question('请输入 Worker URL（例如 https://your-worker.workers.dev）：')
+      ).trim();
+      if (isValidWorkerUrl(answer)) {
+        return answer.replace(/\/$/u, '');
+      }
+      console.log('Worker URL 无效，请输入完整的 http:// 或 https:// 地址。');
+    }
+  } finally {
+    readline.close();
+  }
 }
 
 function isSetupResponse(value: unknown): value is SetupResponse {
@@ -159,37 +202,35 @@ async function selectChat(chats: readonly RecentChat[]): Promise<RecentChat> {
   }
 }
 
-function updateEnvFile(path: string, chatId: string): void {
-  const existing = existsSync(path) ? readFileSync(path, 'utf8') : '';
-  const lines = existing.length === 0 ? [] : existing.split(/\r?\n/u);
-  const keys = ['TELEGRAM_CHAT_ID', 'TELEGRAM_ADMIN_CHAT_IDS'];
+function runWrangler(args: readonly string[], input?: string): boolean {
+  const localWrangler = resolve(
+    rootDir,
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? 'wrangler.cmd' : 'wrangler',
+  );
+  const executable = existsSync(localWrangler)
+    ? localWrangler
+    : process.platform === 'win32'
+      ? 'wrangler.cmd'
+      : 'wrangler';
+  const result = spawnSync(executable, [...args], {
+    cwd: workerDir,
+    encoding: 'utf8',
+    input,
+    shell: executable.endsWith('.cmd'),
+    timeout: 120_000,
+    stdio: ['pipe', 'ignore', 'ignore'],
+  });
+  return result.status === 0;
+}
 
-  for (const key of keys) {
-    const lineIndex = lines.findIndex((line) => new RegExp(`^\\s*${key}\\s*=`, 'u').test(line));
-    if (lineIndex >= 0) {
-      if (key === 'TELEGRAM_ADMIN_CHAT_IDS') {
-        const currentValue = lines[lineIndex]?.split('=').slice(1).join('=').trim() ?? '';
-        const currentIds = currentValue
-          .split(',')
-          .map((value) => value.trim())
-          .filter((value) => value.length > 0);
-        if (!currentIds.includes(chatId)) {
-          currentIds.push(chatId);
-        }
-        lines[lineIndex] = `${key}=${currentIds.join(',')}`;
-      } else {
-        lines[lineIndex] = `${key}=${chatId}`;
-      }
-    } else {
-      lines.push(`${key}=${chatId}`);
-    }
+function updateCloudflareVariable(chatId: string): boolean {
+  if (!runWrangler(['whoami'])) {
+    return false;
   }
 
-  writeFileSync(
-    path,
-    `${lines.filter((line, index) => index < lines.length - 1 || line !== '').join('\n')}\n`,
-    'utf8',
-  );
+  return runWrangler(['secret', 'put', 'TELEGRAM_CHAT_ID', '--env', 'production'], `${chatId}\n`);
 }
 
 async function askToWrite(chat: RecentChat): Promise<void> {
@@ -206,10 +247,16 @@ async function askToWrite(chat: RecentChat): Promise<void> {
 
   const readline = createInterface({ input: process.stdin, output: process.stdout });
   try {
-    const answer = await readline.question('是否写入开发配置？ (Y/n) ');
+    const answer = await readline.question('是否自动更新 Cloudflare Worker 环境变量？ (Y/n) ');
     if (/^y$/iu.test(answer.trim())) {
-      updateEnvFile(workerVarsPath, chatId);
-      console.log(`已写入 ${workerVarsPath}`);
+      if (updateCloudflareVariable(chatId)) {
+        console.log('Cloudflare Worker 环境变量已更新。');
+        console.log('请重新部署 Worker。');
+      } else {
+        console.log('无法自动更新 Cloudflare Worker 配置。');
+        console.log('请复制下面内容到 Cloudflare Worker Environment Variables：');
+        console.log(`TELEGRAM_CHAT_ID=${chatId}`);
+      }
     } else {
       console.log(`TELEGRAM_CHAT_ID=${chatId}`);
     }
@@ -220,13 +267,23 @@ async function askToWrite(chat: RecentChat): Promise<void> {
 
 async function main(): Promise<void> {
   const env = loadLocalEnv();
-  const workerUrl = getWorkerUrl(env)?.replace(/\/$/u, '');
   const secret = getValue('TELEGRAM_SETUP_SECRET', env) ?? getValue('TELEGRAM_WEBHOOK_SECRET', env);
+  if (secret === undefined) {
+    console.error('未找到 TELEGRAM_WEBHOOK_SECRET（或 TELEGRAM_SETUP_SECRET）。');
+    process.exitCode = 1;
+    return;
+  }
 
+  const configuredWorkerUrl = getWorkerUrl(env);
+  let workerUrl =
+    configuredWorkerUrl !== undefined && isValidWorkerUrl(configuredWorkerUrl)
+      ? configuredWorkerUrl.replace(/\/$/u, '')
+      : undefined;
   if (workerUrl === undefined) {
-    console.error(
-      '未找到 Worker 地址。请设置 WORKER_BASE_URL，或使用 --url https://your-worker.workers.dev。',
-    );
+    workerUrl = await askWorkerUrl();
+  }
+  if (workerUrl === undefined) {
+    console.error('无法确定 Worker 地址，请设置 WORKER_BASE_URL 或 LIVE_SUPPORT_WORKER_URL。');
     process.exitCode = 1;
     return;
   }

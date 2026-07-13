@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react';
 
 import type {
@@ -15,6 +15,7 @@ import {
   type ConnectionStatus,
   type WebSocketClientOptions,
 } from './websocket-client';
+import { type ChatWidgetHandle, type SupportEventName, type Visitor } from './sdk-types';
 import './styles.css';
 
 type MessageAuthor = 'visitor' | 'support';
@@ -35,6 +36,10 @@ interface ChatMessage {
 export interface ChatWidgetProps {
   connection?: WebSocketClientOptions;
   title?: string;
+  autoButton?: boolean;
+  initialOpen?: boolean;
+  visitor?: Visitor;
+  onEvent?: (event: SupportEventName, payload: unknown) => void;
 }
 
 const STATUS_LABELS: Record<ConnectionStatus, string> = {
@@ -80,17 +85,35 @@ function formatTimestamp(timestamp: number): string {
   }).format(timestamp);
 }
 
-export function ChatWidget({ connection, title = '在线客服' }: ChatWidgetProps): JSX.Element {
+export const ChatWidget = forwardRef<ChatWidgetHandle, ChatWidgetProps>(function ChatWidget(
+  {
+    connection,
+    title = '在线客服',
+    autoButton = true,
+    initialOpen = false,
+    visitor: initialVisitor,
+    onEvent,
+  },
+  ref,
+): JSX.Element {
   const clientRef = useRef<WebSocketClient | null>(null);
   const endOfMessagesRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(initialOpen);
+  const isOpenRef = useRef(initialOpen);
+  const [visitor, setVisitorState] = useState<Visitor | undefined>(initialVisitor);
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | undefined>(undefined);
   const workerBaseUrl = connection?.baseUrl ?? import.meta.env.VITE_WORKER_BASE_URL?.trim();
+  const emitEvent = useCallback(
+    (event: SupportEventName, payload: unknown): void => {
+      onEvent?.(event, payload);
+    },
+    [onEvent],
+  );
 
   if (clientRef.current === null) {
     clientRef.current = new WebSocketClient({
@@ -102,11 +125,64 @@ export function ChatWidget({ connection, title = '在线客服' }: ChatWidgetPro
 
   const client = clientRef.current;
 
+  const open = useCallback((): void => {
+    isOpenRef.current = true;
+    setIsOpen(true);
+  }, []);
+
+  const close = useCallback((): void => {
+    isOpenRef.current = false;
+    setIsOpen(false);
+  }, []);
+
+  const toggle = useCallback((): void => {
+    isOpenRef.current = !isOpenRef.current;
+    setIsOpen(isOpenRef.current);
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      open,
+      close,
+      toggle,
+      isOpen: () => isOpenRef.current,
+      setVisitor: setVisitorState,
+      getVisitor: () => visitor,
+    }),
+    [close, isOpen, open, toggle, visitor],
+  );
+
+  const previousOpenRef = useRef(isOpen);
   useEffect(() => {
-    const unsubscribeStatus = client.subscribeStatus(setStatus);
+    if (previousOpenRef.current !== isOpen) {
+      emitEvent(isOpen ? 'open' : 'close', undefined);
+      previousOpenRef.current = isOpen;
+    }
+  }, [emitEvent, isOpen]);
+
+  useEffect(() => {
+    const previousStatusRef: { current: ConnectionStatus | undefined } = { current: undefined };
+    const unsubscribeStatus = client.subscribeStatus((nextStatus) => {
+      setStatus(nextStatus);
+      if (previousStatusRef.current !== undefined && previousStatusRef.current !== nextStatus) {
+        if (nextStatus === 'connected') {
+          emitEvent('connected', nextStatus);
+        } else if (nextStatus === 'disconnected') {
+          emitEvent('disconnected', nextStatus);
+        }
+      }
+      previousStatusRef.current = nextStatus;
+    });
     const unsubscribeMessages = client.subscribe((message: ServerMessage) => {
+      if (message.type === 'message' || message.type === 'image') {
+        emitEvent('message', message);
+        emitEvent('message:received', message);
+      }
+
       if (message.type === 'error') {
         setUploadError(message.message);
+        emitEvent('error', message);
       }
 
       if (message.type === 'message') {
@@ -206,7 +282,7 @@ export function ChatWidget({ connection, title = '在线客服' }: ChatWidgetPro
       unsubscribeMessages();
       client.disconnect();
     };
-  }, [client]);
+  }, [client, emitEvent]);
 
   useEffect(() => {
     client.connect();
@@ -231,7 +307,11 @@ export function ChatWidget({ connection, title = '在线客服' }: ChatWidgetPro
       setMessages((currentMessages) =>
         currentMessages.filter((currentMessage) => currentMessage.id !== localMessage.id),
       );
+      emitEvent('error', new Error('无法发送消息。'));
+      return;
     }
+
+    emitEvent('message:sent', { kind: 'text', content });
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
@@ -276,9 +356,14 @@ export function ChatWidget({ connection, title = '在线客服' }: ChatWidgetPro
         setMessages((currentMessages) =>
           currentMessages.filter((currentMessage) => currentMessage.id !== localMessage.id),
         );
+        emitEvent('error', new Error('无法发送图片。'));
+      } else {
+        emitEvent('message:sent', { kind: 'image', imageId: image.imageId });
       }
     } catch (cause) {
-      setUploadError(cause instanceof Error ? cause.message : '图片上传失败。');
+      const error = cause instanceof Error ? cause : new Error('图片上传失败。');
+      setUploadError(error.message);
+      emitEvent('error', error);
     } finally {
       setIsUploading(false);
     }
@@ -302,7 +387,7 @@ export function ChatWidget({ connection, title = '在线客服' }: ChatWidgetPro
               className="live-support-close"
               type="button"
               aria-label="关闭客服聊天"
-              onClick={() => setIsOpen(false)}
+              onClick={close}
             >
               ×
             </button>
@@ -386,15 +471,19 @@ export function ChatWidget({ connection, title = '在线客服' }: ChatWidgetPro
         </section>
       ) : null}
 
-      <button
-        className="live-support-launcher"
-        type="button"
-        aria-expanded={isOpen}
-        aria-label={isOpen ? '关闭客服聊天' : '打开客服聊天'}
-        onClick={() => setIsOpen((open) => !open)}
-      >
-        {isOpen ? '关闭' : '联系客服'}
-      </button>
+      {autoButton ? (
+        <button
+          className="live-support-launcher"
+          type="button"
+          aria-expanded={isOpen}
+          aria-label={isOpen ? '关闭客服聊天' : '打开客服聊天'}
+          onClick={toggle}
+        >
+          {isOpen ? '关闭' : '联系客服'}
+        </button>
+      ) : null}
     </div>
   );
-}
+});
+
+ChatWidget.displayName = 'ChatWidget';
