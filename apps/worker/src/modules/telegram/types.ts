@@ -16,6 +16,7 @@ export interface TelegramMessage {
   message_id: number;
   chat: TelegramChat;
   text?: string;
+  message_thread_id?: number;
 }
 
 export interface TelegramFile {
@@ -46,6 +47,7 @@ export interface TelegramUpdateMessage {
   text?: string;
   caption?: string;
   photo?: TelegramPhotoSize[];
+  message_thread_id?: number;
   reply_to_message?: TelegramUpdateMessage;
 }
 
@@ -66,17 +68,30 @@ export interface TelegramUpdate {
 export interface SendMessageParams {
   chat_id: TelegramChatId;
   text: string;
+  message_thread_id?: number;
 }
 
 export interface SendPhotoParams {
   chat_id: TelegramChatId;
   photo: string | Blob;
   caption?: string;
+  message_thread_id?: number;
 }
 
 export interface SendChatActionParams {
   chat_id: TelegramChatId;
   action: 'typing';
+  message_thread_id?: number;
+}
+
+export interface CreateForumTopicParams {
+  chat_id: TelegramChatId;
+  name: string;
+}
+
+export interface CloseForumTopicParams {
+  chat_id: TelegramChatId;
+  message_thread_id: number;
 }
 
 export type TelegramFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;

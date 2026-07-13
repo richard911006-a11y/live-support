@@ -10,6 +10,7 @@
   "upload_source_maps": true,
   "vars": {
     "PUBLIC_WIDGET_ORIGINS": "https://80ce83ec.live-support-ctc.pages.dev",
+    "SESSION_IDLE_TIMEOUT": "24h",
   },
   "secrets": {
     "required": ["TELEGRAM_BOT_TOKEN", "TELEGRAM_ADMIN_CHAT_IDS", "TELEGRAM_WEBHOOK_SECRET"],
@@ -51,6 +52,7 @@
       "preview_urls": true,
       "vars": {
         "PUBLIC_WIDGET_ORIGINS": "https://80ce83ec.live-support-ctc.pages.dev",
+        "SESSION_IDLE_TIMEOUT": "24h",
       },
       "secrets": {
         "required": ["TELEGRAM_BOT_TOKEN", "TELEGRAM_ADMIN_CHAT_IDS", "TELEGRAM_WEBHOOK_SECRET"],
@@ -85,6 +87,7 @@
       "workers_dev": true,
       "vars": {
         "PUBLIC_WIDGET_ORIGINS": "https://80ce83ec.live-support-ctc.pages.dev",
+        "SESSION_IDLE_TIMEOUT": "24h",
       },
       "secrets": {
         "required": ["TELEGRAM_BOT_TOKEN", "TELEGRAM_ADMIN_CHAT_IDS", "TELEGRAM_WEBHOOK_SECRET"],

@@ -95,6 +95,36 @@ describe('Telegram integration', () => {
     expect(attempts).toBe(2);
   });
 
+  it('supports forum topic creation and threaded messages', async () => {
+    const requests: { method: string; body: Record<string, unknown> }[] = [];
+    const client = new TelegramApiClient('test-token', {
+      apiBaseUrl: 'https://telegram.test',
+      fetchImplementation: async (input, init) => {
+        const method = String(input).split('/').pop() ?? '';
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        requests.push({ method, body });
+
+        const result =
+          method === 'createForumTopic'
+            ? { message_id: 1, message_thread_id: 42, chat: { id: 100, type: 'supergroup' } }
+            : { message_id: 2, message_thread_id: 42, chat: { id: 100, type: 'supergroup' } };
+
+        return new Response(JSON.stringify({ ok: true, result }), { status: 200 });
+      },
+    });
+
+    await client.createForumTopic('100' as TelegramChatId, '访客 #1001');
+    await client.sendMessage('100' as TelegramChatId, '用户：你好', { messageThreadId: 42 });
+
+    expect(requests).toEqual([
+      { method: 'createForumTopic', body: { chat_id: '100', name: '访客 #1001' } },
+      {
+        method: 'sendMessage',
+        body: { chat_id: '100', text: '用户：你好', message_thread_id: 42 },
+      },
+    ]);
+  });
+
   it('delivers each customer message to every configured administrator', async () => {
     const chatIds: string[] = [];
     const messages: string[] = [];

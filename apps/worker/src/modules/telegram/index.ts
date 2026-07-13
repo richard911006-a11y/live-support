@@ -1,5 +1,5 @@
 export { TelegramApiClient, TelegramApiError } from './client';
-export type { TelegramApiClientOptions } from './client';
+export type { TelegramApiClientOptions, TelegramTopicOptions } from './client';
 export {
   formatCustomerMessage,
   formatCustomerImageCaption,
@@ -7,6 +7,7 @@ export {
   parseAdminChatIds,
   TelegramService,
   type TelegramServiceOptions,
+  type TelegramTopic,
 } from './service';
 export type {
   SendChatActionParams,
@@ -23,4 +24,6 @@ export type {
   TelegramUpdate,
   TelegramUpdateChat,
   TelegramUpdateMessage,
+  CloseForumTopicParams,
+  CreateForumTopicParams,
 } from './types';

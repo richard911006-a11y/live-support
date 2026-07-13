@@ -2,6 +2,8 @@ import type { TelegramChatId } from '@live-support/types';
 
 import type {
   SendChatActionParams,
+  CloseForumTopicParams,
+  CreateForumTopicParams,
   GetFileParams,
   SendMessageParams,
   SendPhotoParams,
@@ -31,6 +33,10 @@ export interface TelegramApiClientOptions {
   apiBaseUrl?: string;
 }
 
+export interface TelegramTopicOptions {
+  messageThreadId?: number;
+}
+
 /** Centralized, retrying client for Telegram Bot API requests. */
 export class TelegramApiClient {
   private readonly fetchImplementation: TelegramFetch;
@@ -44,8 +50,18 @@ export class TelegramApiClient {
     this.apiBaseUrl = (options.apiBaseUrl ?? TELEGRAM_API_URL).replace(/\/$/, '');
   }
 
-  public sendMessage(chatId: TelegramChatId, text: string): Promise<TelegramMessage> {
-    const body: SendMessageParams = { chat_id: chatId, text };
+  public sendMessage(
+    chatId: TelegramChatId,
+    text: string,
+    options: TelegramTopicOptions = {},
+  ): Promise<TelegramMessage> {
+    const body: SendMessageParams = {
+      chat_id: chatId,
+      text,
+      ...(options.messageThreadId === undefined
+        ? {}
+        : { message_thread_id: options.messageThreadId }),
+    };
     return this.request<TelegramMessage>('sendMessage', body);
   }
 
@@ -53,22 +69,53 @@ export class TelegramApiClient {
     chatId: TelegramChatId,
     photo: string | Blob,
     caption?: string,
+    options: TelegramTopicOptions = {},
   ): Promise<TelegramMessage> {
     const form = new FormData();
-    const body: SendPhotoParams = { chat_id: chatId, photo };
+    const body: SendPhotoParams = {
+      chat_id: chatId,
+      photo,
+      ...(caption === undefined ? {} : { caption }),
+      ...(options.messageThreadId === undefined
+        ? {}
+        : { message_thread_id: options.messageThreadId }),
+    };
     form.append('chat_id', body.chat_id);
     form.append('photo', body.photo);
 
-    if (caption !== undefined) {
-      form.append('caption', caption);
+    if (body.caption !== undefined) {
+      form.append('caption', body.caption);
+    }
+
+    if (body.message_thread_id !== undefined) {
+      form.append('message_thread_id', String(body.message_thread_id));
     }
 
     return this.request<TelegramMessage>('sendPhoto', form);
   }
 
-  public sendTyping(chatId: TelegramChatId): Promise<boolean> {
-    const body: SendChatActionParams = { chat_id: chatId, action: 'typing' };
+  public sendTyping(chatId: TelegramChatId, options: TelegramTopicOptions = {}): Promise<boolean> {
+    const body: SendChatActionParams = {
+      chat_id: chatId,
+      action: 'typing',
+      ...(options.messageThreadId === undefined
+        ? {}
+        : { message_thread_id: options.messageThreadId }),
+    };
     return this.request<boolean>('sendChatAction', body);
+  }
+
+  public createForumTopic(chatId: TelegramChatId, name: string): Promise<TelegramMessage> {
+    const body: CreateForumTopicParams = { chat_id: chatId, name };
+    return this.request<TelegramMessage>('createForumTopic', body);
+  }
+
+  public closeForumTopic(chatId: TelegramChatId, messageThreadId: number): Promise<boolean> {
+    const body: CloseForumTopicParams = {
+      chat_id: chatId,
+      message_thread_id: messageThreadId,
+    };
+    return this.request<boolean>('closeForumTopic', body);
   }
 
   public getFile(fileId: string): Promise<TelegramFile> {

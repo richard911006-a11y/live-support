@@ -7,4 +7,5 @@ export interface Env {
   TELEGRAM_ADMIN_CHAT_IDS: string;
   TELEGRAM_WEBHOOK_SECRET: string;
   PUBLIC_WIDGET_ORIGINS?: string;
+  SESSION_IDLE_TIMEOUT?: string;
 }

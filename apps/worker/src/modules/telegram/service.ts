@@ -6,6 +6,21 @@ import { logger as defaultLogger, type Logger } from '../../utils/logger';
 import { TelegramApiClient } from './client';
 import type { TelegramApiClientOptions } from './client';
 
+const TOPIC_INDEX_PREFIX = 'telegram-topic:';
+const TOPIC_INDEX_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+export interface TelegramTopic {
+  readonly chatId: TelegramChatId;
+  readonly messageThreadId: number;
+  readonly visitorId: VisitorId;
+  readonly createdAt: number;
+}
+
+interface TopicIndexStore {
+  get(key: string, type: 'text'): Promise<string | null>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+}
+
 export interface TelegramServiceOptions extends TelegramApiClientOptions {
   client?: TelegramApiClient;
   logger?: Logger;
@@ -24,6 +39,16 @@ export function parseAdminChatIds(value: string | undefined): TelegramChatId[] {
 
 export function isConfiguredAdminChat(chatId: number, value: string | undefined): boolean {
   return parseAdminChatIds(value).includes(String(chatId) as TelegramChatId);
+}
+
+export function formatVisitorLabel(visitorId: VisitorId): string {
+  let hash = 0;
+
+  for (const character of visitorId) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+
+  return `#${1000 + (hash % 9000)}`;
 }
 
 export function formatCustomerMessage(
@@ -98,6 +123,7 @@ export class TelegramService {
   private readonly logger: Logger;
   private readonly adminChatIds: readonly TelegramChatId[];
   private readonly enabled: boolean;
+  private readonly topicIndex: TopicIndexStore | undefined;
 
   public constructor(env: Env, options: TelegramServiceOptions = {}) {
     const botToken =
@@ -106,6 +132,7 @@ export class TelegramService {
     this.logger = options.logger ?? defaultLogger;
     this.adminChatIds = parseAdminChatIds(env.TELEGRAM_ADMIN_CHAT_IDS);
     this.enabled = botToken.length > 0 && this.adminChatIds.length > 0;
+    this.topicIndex = env.CHAT_CONFIG as unknown as TopicIndexStore | undefined;
   }
 
   public sendMessage(chatId: TelegramChatId, text: string) {
@@ -120,29 +147,116 @@ export class TelegramService {
     return this.client.sendTyping(chatId);
   }
 
+  public async createVisitorTopics(
+    visitorId: VisitorId,
+    visitorInfo: VisitorInfo,
+  ): Promise<TelegramTopic[]> {
+    if (!this.enabled) {
+      return [];
+    }
+
+    const topicName = `访客 ${formatVisitorLabel(visitorId)}`;
+    const deliveries = await Promise.allSettled(
+      this.adminChatIds.map(async (chatId): Promise<TelegramTopic> => {
+        const topicMessage = await this.client.createForumTopic(chatId, topicName);
+        const messageThreadId = topicMessage.message_thread_id;
+
+        if (messageThreadId === undefined) {
+          throw new Error('Telegram did not return a forum topic id.');
+        }
+
+        const topic: TelegramTopic = {
+          chatId,
+          messageThreadId,
+          visitorId,
+          createdAt: Date.now(),
+        };
+        await this.saveTopicMapping(topic);
+
+        try {
+          await this.client.sendMessage(chatId, formatNewVisitorMessage(visitorInfo), {
+            messageThreadId,
+          });
+        } catch (cause) {
+          this.logger.error('Telegram visitor introduction failed.', cause);
+        }
+
+        return topic;
+      }),
+    );
+
+    return deliveries.flatMap((delivery) => {
+      if (delivery.status === 'fulfilled') {
+        return [delivery.value];
+      }
+
+      this.logger.error('Telegram forum topic creation failed.', delivery.reason);
+      return [];
+    });
+  }
+
+  public async lookupVisitorByTopic(
+    chatId: TelegramChatId,
+    messageThreadId: number,
+  ): Promise<VisitorId | undefined> {
+    if (this.topicIndex === undefined) {
+      return undefined;
+    }
+
+    try {
+      const visitorId = await this.topicIndex.get(
+        this.topicIndexKey(chatId, messageThreadId),
+        'text',
+      );
+      return visitorId === null || visitorId.length === 0 ? undefined : (visitorId as VisitorId);
+    } catch (cause) {
+      this.logger.error('Telegram topic lookup failed.', cause);
+      return undefined;
+    }
+  }
+
+  public async sendTopicInfo(
+    chatId: TelegramChatId,
+    messageThreadId: number,
+    visitorInfo: VisitorInfo,
+  ): Promise<void> {
+    await this.client.sendMessage(chatId, formatTopicInfo(visitorInfo), { messageThreadId });
+  }
+
+  public async notifyTopicSystem(topics: readonly TelegramTopic[], message: string): Promise<void> {
+    await this.deliverTopics(topics, (topic) =>
+      this.client.sendMessage(topic.chatId, message, { messageThreadId: topic.messageThreadId }),
+    );
+  }
+
+  public async closeTopics(topics: readonly TelegramTopic[]): Promise<void> {
+    await this.deliverTopics(topics, (topic) =>
+      this.client.closeForumTopic(topic.chatId, topic.messageThreadId),
+    );
+  }
+
   public async notifyCustomerMessage(
     visitorId: VisitorId,
     message: string,
     visitorInfo?: VisitorInfo,
+    topics?: readonly TelegramTopic[],
   ): Promise<void> {
     if (!this.enabled) {
       return;
     }
 
-    const text = formatCustomerMessage(visitorId, message, visitorInfo);
-    const deliveries = await Promise.allSettled(
-      this.adminChatIds.map((chatId) => this.client.sendMessage(chatId, text)),
-    );
-    const failures = deliveries.filter(
-      (delivery): delivery is PromiseRejectedResult => delivery.status === 'rejected',
-    );
-
-    if (failures.length > 0) {
-      this.logger.error(
-        `Telegram delivery failed for ${failures.length} administrator chat(s).`,
-        failures[0]?.reason,
+    if (topics !== undefined && topics.length > 0) {
+      await this.deliverTopics(topics, (topic) =>
+        this.client.sendMessage(topic.chatId, `用户：${message}`, {
+          messageThreadId: topic.messageThreadId,
+        }),
       );
+      return;
     }
+
+    await this.deliverAdmins((chatId) =>
+      this.client.sendMessage(chatId, formatCustomerMessage(visitorId, message, visitorInfo)),
+    );
   }
 
   public async notifyCustomerImage(
@@ -150,25 +264,28 @@ export class TelegramService {
     url: string,
     caption?: string,
     visitorInfo?: VisitorInfo,
+    topics?: readonly TelegramTopic[],
   ): Promise<void> {
     if (!this.enabled) {
       return;
     }
 
-    const imageCaption = formatCustomerImageCaption(visitorId, caption, visitorInfo);
-    const deliveries = await Promise.allSettled(
-      this.adminChatIds.map((chatId) => this.client.sendPhoto(chatId, url, imageCaption)),
-    );
-    const failures = deliveries.filter(
-      (delivery): delivery is PromiseRejectedResult => delivery.status === 'rejected',
-    );
-
-    if (failures.length > 0) {
-      this.logger.error(
-        `Telegram image delivery failed for ${failures.length} administrator chat(s).`,
-        failures[0]?.reason,
+    if (topics !== undefined && topics.length > 0) {
+      await this.deliverTopics(topics, (topic) =>
+        this.client.sendPhoto(topic.chatId, url, `访客 ${formatVisitorLabel(visitorId)}\n图片`, {
+          messageThreadId: topic.messageThreadId,
+        }),
       );
+      return;
     }
+
+    await this.deliverAdmins((chatId) =>
+      this.client.sendPhoto(
+        chatId,
+        url,
+        formatCustomerImageCaption(visitorId, caption, visitorInfo),
+      ),
+    );
   }
 
   public async downloadImage(fileId: string): Promise<{ blob: Blob; contentType: string }> {
@@ -183,6 +300,84 @@ export class TelegramService {
 
     return { blob, contentType };
   }
+
+  private async saveTopicMapping(topic: TelegramTopic): Promise<void> {
+    if (this.topicIndex === undefined) {
+      return;
+    }
+
+    try {
+      await this.topicIndex.put(
+        this.topicIndexKey(topic.chatId, topic.messageThreadId),
+        topic.visitorId,
+        { expirationTtl: TOPIC_INDEX_TTL_SECONDS },
+      );
+    } catch (cause) {
+      this.logger.error('Telegram topic mapping could not be stored.', cause);
+    }
+  }
+
+  private topicIndexKey(chatId: TelegramChatId, messageThreadId: number): string {
+    return `${TOPIC_INDEX_PREFIX}${chatId}:${messageThreadId}`;
+  }
+
+  private async deliverAdmins(send: (chatId: TelegramChatId) => Promise<unknown>): Promise<void> {
+    const deliveries = await Promise.allSettled(this.adminChatIds.map(send));
+    const failures = deliveries.filter(
+      (delivery): delivery is PromiseRejectedResult => delivery.status === 'rejected',
+    );
+
+    if (failures.length > 0) {
+      this.logger.error(
+        `Telegram delivery failed for ${failures.length} administrator chat(s).`,
+        failures[0]?.reason,
+      );
+    }
+  }
+
+  private async deliverTopics(
+    topics: readonly TelegramTopic[],
+    send: (topic: TelegramTopic) => Promise<unknown>,
+  ): Promise<void> {
+    const deliveries = await Promise.allSettled(topics.map(send));
+    const failures = deliveries.filter(
+      (delivery): delivery is PromiseRejectedResult => delivery.status === 'rejected',
+    );
+
+    if (failures.length > 0) {
+      this.logger.error(
+        `Telegram topic delivery failed for ${failures.length} topic(s).`,
+        failures[0]?.reason,
+      );
+    }
+  }
+}
+
+function formatNewVisitorMessage(info: VisitorInfo): string {
+  return [
+    '━━━━━━━━━━━━━━',
+    '🟢 新访客',
+    '',
+    '编号：',
+    formatVisitorLabel(info.visitorId),
+    '',
+    ...formatTopicVisitorInfo(info).slice(1),
+  ].join('\n');
+}
+
+function formatTopicInfo(info: VisitorInfo): string {
+  return ['━━━━━━━━━━━━━━', '访客资料', '', ...formatTopicVisitorInfo(info).slice(1)].join('\n');
+}
+
+function formatTopicVisitorInfo(info: VisitorInfo): string[] {
+  const lines = [...formatVisitorInfo(info)];
+  const visitorLabelIndex = lines.indexOf('访客');
+
+  if (visitorLabelIndex >= 0 && visitorLabelIndex + 1 < lines.length) {
+    lines[visitorLabelIndex + 1] = formatVisitorLabel(info.visitorId);
+  }
+
+  return lines;
 }
 
 function formatVisitorInfo(info: VisitorInfo): string[] {

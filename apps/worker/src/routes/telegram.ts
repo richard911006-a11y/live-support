@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 
 import {
   SUPPORTED_IMAGE_MIME_TYPES,
+  type TelegramChatId,
   type SupportedImageMimeType,
   type VisitorId,
 } from '@live-support/types';
@@ -16,6 +17,7 @@ import {
 import { ImageService } from '../modules/r2';
 import { logger } from '../utils/logger';
 import type { Env } from '../types/env';
+import type { VisitorInfo } from '../types';
 
 const TELEGRAM_SECRET_HEADER = 'X-Telegram-Bot-Api-Secret-Token';
 const VISITOR_METADATA_PATTERN = /(?:👤\s*)?(?:Visitor|访客)\s*\r?\n\s*([^\r\n]+)/u;
@@ -43,7 +45,25 @@ async function handleWebhook(context: Context<{ Bindings: Env }>): Promise<Respo
       return success({ ok: true, ignored: true, read: false });
     }
 
-    const visitorId = extractVisitorId(message.reply_to_message);
+    const telegramService = new TelegramService(context.env);
+    const messageThreadId =
+      message.message_thread_id ?? message.reply_to_message?.message_thread_id;
+    const topicVisitorId =
+      messageThreadId === undefined
+        ? undefined
+        : await telegramService.lookupVisitorByTopic(
+            String(message.chat.id) as TelegramChatId,
+            messageThreadId,
+          );
+    const visitorId = topicVisitorId ?? extractVisitorId(message.reply_to_message);
+
+    if (message.text !== undefined && isInfoCommand(message.text)) {
+      if (visitorId === undefined || messageThreadId === undefined) {
+        return success({ ok: true, ignored: true, read: false });
+      }
+
+      return forwardInfo(context, telegramService, message.chat.id, visitorId, messageThreadId);
+    }
 
     if (visitorId === undefined) {
       return success({ ok: true, ignored: true, read: false });
@@ -51,6 +71,10 @@ async function handleWebhook(context: Context<{ Bindings: Env }>): Promise<Respo
 
     if (message.text !== undefined) {
       if (message.text.length === 0 || isCommand(message.text)) {
+        return success({ ok: true, ignored: true, read: false });
+      }
+
+      if (message.reply_to_message === undefined && topicVisitorId === undefined) {
         return success({ ok: true, ignored: true, read: false });
       }
 
@@ -68,7 +92,6 @@ async function handleWebhook(context: Context<{ Bindings: Env }>): Promise<Respo
     }
 
     try {
-      const telegramService = new TelegramService(context.env);
       const downloaded = await telegramService.downloadImage(photo.file_id);
       const contentType = downloaded.contentType.split(';', 1)[0]?.toLowerCase() ?? '';
 
@@ -116,6 +139,43 @@ type ReplyPayload =
       caption?: string;
     };
 
+async function forwardInfo(
+  context: Context<{ Bindings: Env }>,
+  telegramService: TelegramService,
+  chatId: number,
+  visitorId: VisitorId,
+  messageThreadId: number,
+): Promise<Response> {
+  try {
+    const room = context.env.CHAT_ROOM.getByName(visitorId);
+    const response = await room.fetch(
+      new Request('https://chat-room.internal/internal/telegram/info', {
+        method: 'POST',
+      }),
+    );
+
+    if (!response.ok) {
+      return error('Telegram 访客资料暂时无法读取。', 503);
+    }
+
+    const result = (await response.json()) as { info?: VisitorInfo };
+
+    if (result.info === undefined) {
+      return success({ ok: true, ignored: true, read: false });
+    }
+
+    await telegramService.sendTopicInfo(
+      String(chatId) as TelegramChatId,
+      messageThreadId,
+      result.info,
+    );
+    return success({ ok: true, read: true });
+  } catch (cause) {
+    logger.error('Telegram visitor info request failed', cause);
+    return error('Telegram 访客资料读取失败。', 503);
+  }
+}
+
 async function forwardReply(
   context: Context<{ Bindings: Env }>,
   payload: ReplyPayload,
@@ -150,6 +210,10 @@ function getUpdateMessage(update: TelegramUpdate): TelegramUpdateMessage | undef
 
 function isCommand(text: string): boolean {
   return text.trimStart().startsWith('/');
+}
+
+function isInfoCommand(text: string): boolean {
+  return /^\/info(?:@[^\s]+)?(?:\s|$)/u.test(text.trim());
 }
 
 function getLargestPhoto(message: TelegramUpdateMessage) {
