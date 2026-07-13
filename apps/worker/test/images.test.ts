@@ -147,6 +147,46 @@ describe('R2 image uploads', () => {
     expect(response.headers.get('access-control-allow-origin')).toBeNull();
   });
 
+  it('allows any configured Widget origin when the wildcard is enabled', async () => {
+    const bucket = { put: async () => undefined };
+    const env = { ...createEnv(bucket), PUBLIC_WIDGET_ORIGINS: '*' };
+    const form = new FormData();
+    form.append('file', new File(['png data'], 'photo.png', { type: 'image/png' }));
+
+    const response = await app.request(
+      '/images',
+      { method: 'POST', headers: { Origin: 'https://merchant.example' }, body: form },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('access-control-allow-origin')).toBe('*');
+    expect(response.headers.get('access-control-allow-methods')).toBe('GET, POST, OPTIONS');
+    expect(response.headers.get('access-control-allow-headers')).toBe('content-type');
+  });
+
+  it('keeps CORS headers on upload failures and unexpected R2 errors', async () => {
+    const bucket = {
+      put: async () => {
+        throw new Error('R2 unavailable');
+      },
+    };
+    const env = { ...createEnv(bucket), PUBLIC_WIDGET_ORIGINS: '*' };
+    const form = new FormData();
+    form.append('file', new File(['png data'], 'photo.png', { type: 'image/png' }));
+
+    const response = await app.request(
+      '/images',
+      { method: 'POST', headers: { Origin: 'https://merchant.example' }, body: form },
+      env,
+    );
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get('access-control-allow-origin')).toBe('*');
+    expect(response.headers.get('access-control-allow-methods')).toBe('GET, POST, OPTIONS');
+    expect(response.headers.get('access-control-allow-headers')).toBe('content-type');
+  });
+
   it('provides a reusable browser upload helper', async () => {
     const file = new Blob(['webp data'], { type: 'image/webp' });
     let requestBody: BodyInit | null | undefined;

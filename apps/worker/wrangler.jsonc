@@ -9,7 +9,7 @@
   "minify": true,
   "upload_source_maps": true,
   "vars": {
-    "PUBLIC_WIDGET_ORIGINS": "https://80ce83ec.live-support-ctc.pages.dev",
+    "PUBLIC_WIDGET_ORIGINS": "*",
     "SESSION_IDLE_TIMEOUT": "24h",
   },
   "secrets": {
@@ -51,7 +51,7 @@
       "workers_dev": true,
       "preview_urls": true,
       "vars": {
-        "PUBLIC_WIDGET_ORIGINS": "https://80ce83ec.live-support-ctc.pages.dev",
+        "PUBLIC_WIDGET_ORIGINS": "*",
         "SESSION_IDLE_TIMEOUT": "24h",
       },
       "secrets": {
@@ -86,7 +86,7 @@
       "name": "live-support-worker",
       "workers_dev": true,
       "vars": {
-        "PUBLIC_WIDGET_ORIGINS": "https://80ce83ec.live-support-ctc.pages.dev",
+        "PUBLIC_WIDGET_ORIGINS": "*",
         "SESSION_IDLE_TIMEOUT": "24h",
       },
       "secrets": {

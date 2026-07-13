@@ -37,13 +37,14 @@ function applyCorsHeaders(
   origin: string | undefined,
   allowedOrigins: string[],
 ): void {
-  if (origin === undefined || !allowedOrigins.includes(origin)) {
+  const allowAnyOrigin = allowedOrigins.includes('*');
+  if (!allowAnyOrigin && (origin === undefined || !allowedOrigins.includes(origin))) {
     return;
   }
 
   const response = context.res;
   const headers = new Headers(response.headers);
-  headers.set('access-control-allow-origin', origin);
+  headers.set('access-control-allow-origin', allowAnyOrigin ? '*' : (origin ?? 'null'));
   headers.set('access-control-allow-methods', 'GET, POST, OPTIONS');
   headers.set('access-control-allow-headers', 'content-type');
   headers.set('vary', 'Origin');
