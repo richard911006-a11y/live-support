@@ -7,7 +7,11 @@ import { extractVisitorId } from '../src/routes/telegram';
 import { formatCustomerImageCaption, formatCustomerMessage } from '../src/modules/telegram';
 import type { Env } from '../src/types/env';
 
-function createEnv(forward: (request: Request) => Promise<Response>, adminChatIds = '100'): Env {
+function createEnv(
+  forward: (request: Request) => Promise<Response>,
+  adminChatIds = '100',
+  webhookSecret = 'test-secret',
+): Env {
   return {
     CHAT_CONFIG: undefined as never,
     CHAT_IMAGES: undefined as never,
@@ -16,7 +20,7 @@ function createEnv(forward: (request: Request) => Promise<Response>, adminChatId
     } as never,
     TELEGRAM_ADMIN_CHAT_IDS: adminChatIds,
     TELEGRAM_BOT_TOKEN: 'test-token',
-    TELEGRAM_WEBHOOK_SECRET: 'test-secret',
+    TELEGRAM_WEBHOOK_SECRET: webhookSecret,
   };
 }
 
@@ -162,6 +166,29 @@ describe('Telegram webhook', () => {
       read: false,
     });
     expect(invalidSecretResponse.status).toBe(401);
+  });
+
+  it('allows direct Telegram requests when webhook secret authentication is disabled', async () => {
+    const response = await app.request(
+      '/telegram/webhook',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ update_id: 6 }),
+      },
+      createEnv(
+        async () => new Response(JSON.stringify({ delivered: true }), { status: 200 }),
+        '100',
+        '',
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ignored: true,
+      ok: true,
+      read: false,
+    });
   });
 
   it('does not guess a Session when a Topic binding is missing', async () => {

@@ -64,9 +64,7 @@ async function handleTelegramSetup(context: Context<{ Bindings: Env }>): Promise
 }
 
 async function handleWebhook(context: Context<{ Bindings: Env }>): Promise<Response> {
-  const providedSecret = context.req.header(TELEGRAM_SECRET_HEADER);
-
-  if (!secretsMatch(context.env.TELEGRAM_WEBHOOK_SECRET, providedSecret ?? null)) {
+  if (!isWebhookAuthorized(context)) {
     return error('Telegram Webhook 密钥无效。', 401);
   }
 
@@ -264,6 +262,19 @@ function isSetupAuthorized(context: Context<{ Bindings: Env }>): boolean {
     secretsMatch(context.env.TELEGRAM_WEBHOOK_SECRET, providedSecret) ||
     secretsMatch(context.env.TELEGRAM_SETUP_SECRET, providedSecret)
   );
+}
+
+function isWebhookAuthorized(context: Context<{ Bindings: Env }>): boolean {
+  const expectedSecret = context.env.TELEGRAM_WEBHOOK_SECRET?.trim();
+
+  // Telegram only sends the secret header when setWebhook included secret_token.
+  // An empty secret explicitly selects Telegram's unauthenticated webhook mode.
+  if (expectedSecret === undefined || expectedSecret.length === 0) {
+    return true;
+  }
+
+  const providedSecret = context.req.header(TELEGRAM_SECRET_HEADER)?.trim() ?? null;
+  return secretsMatch(expectedSecret, providedSecret);
 }
 
 function isCommand(text: string): boolean {
