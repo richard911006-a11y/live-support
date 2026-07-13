@@ -10,6 +10,14 @@ export interface TelegramApiResponse<Result> {
 export interface TelegramChat {
   id: number;
   type: string;
+  title?: string;
+}
+
+export interface TelegramUser {
+  id: number;
+  is_bot: boolean;
+  first_name: string;
+  username?: string;
 }
 
 export interface TelegramMessage {
@@ -39,6 +47,10 @@ export interface SetWebhookParams {
 export interface TelegramUpdateChat {
   id: number;
   type: string;
+  title?: string;
+  first_name?: string;
+  last_name?: string;
+  is_forum?: boolean;
 }
 
 export interface TelegramUpdateMessage {

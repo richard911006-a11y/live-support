@@ -12,6 +12,7 @@ import type {
   TelegramFetch,
   TelegramFile,
   TelegramMessage,
+  TelegramUser,
 } from './types';
 
 const TELEGRAM_API_URL = 'https://api.telegram.org';
@@ -63,6 +64,10 @@ export class TelegramApiClient {
         : { message_thread_id: options.messageThreadId }),
     };
     return this.request<TelegramMessage>('sendMessage', body);
+  }
+
+  public getMe(): Promise<TelegramUser> {
+    return this.request<TelegramUser>('getMe', {});
   }
 
   public sendPhoto(

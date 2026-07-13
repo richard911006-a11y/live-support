@@ -1,6 +1,12 @@
 export { TelegramApiClient, TelegramApiError } from './client';
 export type { TelegramApiClientOptions, TelegramTopicOptions } from './client';
 export {
+  cacheTelegramUpdate,
+  readRecentTelegramChats,
+  type RecentTelegramChat,
+  type TelegramChatCacheStore,
+} from './chat-cache';
+export {
   formatCustomerMessage,
   formatCustomerImageCaption,
   findTopicForVisitor,
@@ -25,6 +31,7 @@ export type {
   TelegramFile,
   TelegramMessage,
   TelegramPhotoSize,
+  TelegramUser,
   TelegramUpdate,
   TelegramUpdateChat,
   TelegramUpdateMessage,

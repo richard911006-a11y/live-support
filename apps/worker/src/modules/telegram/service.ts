@@ -6,6 +6,7 @@ import { logger as defaultLogger, type Logger } from '../../utils/logger';
 import { TelegramApiClient } from './client';
 import { TelegramApiError } from './client';
 import type { TelegramApiClientOptions } from './client';
+import type { TelegramUser } from './types';
 
 const TOPIC_INDEX_PREFIX = 'telegram-topic:';
 const SESSION_INDEX_PREFIX = 'telegram-session:';
@@ -177,6 +178,10 @@ export class TelegramService {
 
   public sendMessage(chatId: TelegramChatId, text: string) {
     return this.client.sendMessage(chatId, text);
+  }
+
+  public getBotInfo(): Promise<TelegramUser> {
+    return this.client.getMe();
   }
 
   public sendPhoto(chatId: TelegramChatId, photo: string | Blob, caption?: string) {

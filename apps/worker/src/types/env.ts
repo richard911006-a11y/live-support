@@ -5,6 +5,8 @@ export interface Env {
   CHAT_ROOM: CloudflareBindings['CHAT_ROOM'];
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_ADMIN_CHAT_IDS: string;
+  TELEGRAM_CHAT_ID?: string;
+  TELEGRAM_SETUP_SECRET?: string;
   TELEGRAM_WEBHOOK_SECRET: string;
   PUBLIC_WIDGET_ORIGINS?: string;
   SESSION_IDLE_TIMEOUT?: string;

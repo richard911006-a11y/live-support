@@ -10,11 +10,13 @@ import {
 import { error, success } from '../http/responses';
 import {
   isConfiguredAdminChat,
+  parseAdminChatIds,
   TelegramService,
   type TelegramTopicBinding,
   type TelegramUpdate,
   type TelegramUpdateMessage,
 } from '../modules/telegram';
+import { cacheTelegramUpdate, readRecentTelegramChats } from '../modules/telegram/chat-cache';
 import { ImageService } from '../modules/r2';
 import { logger } from '../utils/logger';
 import type { Env } from '../types/env';
@@ -25,7 +27,41 @@ const VISITOR_METADATA_PATTERN = /(?:👤\s*)?(?:Visitor|访客)\s*\r?\n\s*([^\r
 
 export const telegramRoutes = new Hono<{ Bindings: Env }>()
   .post('/telegram/webhook', handleWebhook)
-  .post('/webhook/telegram', handleWebhook);
+  .post('/webhook/telegram', handleWebhook)
+  .get('/admin/telegram/config', handleTelegramSetup);
+
+async function handleTelegramSetup(context: Context<{ Bindings: Env }>): Promise<Response> {
+  if (!isSetupAuthorized(context)) {
+    return error('Telegram 配置接口未授权。', 401);
+  }
+
+  try {
+    const telegramService = new TelegramService(context.env);
+    const [bot, recentChats] = await Promise.all([
+      telegramService.getBotInfo(),
+      readRecentTelegramChats(context.env.CHAT_CONFIG),
+    ]);
+    const explicitChatId = context.env.TELEGRAM_CHAT_ID?.trim();
+    const configuredChatId =
+      explicitChatId === undefined || explicitChatId.length === 0
+        ? (parseAdminChatIds(context.env.TELEGRAM_ADMIN_CHAT_IDS)[0] ?? null)
+        : explicitChatId;
+
+    return success({
+      ok: true,
+      bot: {
+        id: bot.id,
+        name: bot.first_name,
+        username: bot.username ?? null,
+      },
+      telegramChatId: configuredChatId,
+      recentChats,
+    });
+  } catch (cause) {
+    logger.error('Telegram setup information request failed.', cause);
+    return error('Telegram 配置信息暂时无法读取。', 503);
+  }
+}
 
 async function handleWebhook(context: Context<{ Bindings: Env }>): Promise<Response> {
   const providedSecret = context.req.header(TELEGRAM_SECRET_HEADER);
@@ -36,6 +72,11 @@ async function handleWebhook(context: Context<{ Bindings: Env }>): Promise<Respo
 
   try {
     const update = (await context.req.raw.json()) as TelegramUpdate;
+    try {
+      await cacheTelegramUpdate(context.env.CHAT_CONFIG, update);
+    } catch (cause) {
+      logger.error('Telegram chat cache update failed.', cause);
+    }
     const message = getUpdateMessage(update);
 
     if (message === undefined) {
@@ -214,6 +255,15 @@ async function forwardReply(
 
 function getUpdateMessage(update: TelegramUpdate): TelegramUpdateMessage | undefined {
   return update.message ?? update.edited_message;
+}
+
+function isSetupAuthorized(context: Context<{ Bindings: Env }>): boolean {
+  const authorization = context.req.header('Authorization');
+  const providedSecret = authorization?.replace(/^Bearer\s+/iu, '') ?? null;
+  return (
+    secretsMatch(context.env.TELEGRAM_WEBHOOK_SECRET, providedSecret) ||
+    secretsMatch(context.env.TELEGRAM_SETUP_SECRET, providedSecret)
+  );
 }
 
 function isCommand(text: string): boolean {

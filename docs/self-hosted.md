@@ -32,6 +32,8 @@ pnpm deploy
 
 脚本不会覆盖现有 `.env`、`.dev.vars` 或 Wrangler 配置，也不会自动删除 Cloudflare 资源。
 
+安装体验原则：任何需要用户手动查找、复制或猜测配置的步骤，都视为安装体验缺陷，应由工具或系统自动发现并提供可直接使用的结果。
+
 ## 3. 配置文件和 Secrets
 
 Widget 本地配置示例：
@@ -58,6 +60,7 @@ apps/worker/.dev.vars.example
 - `TELEGRAM_ADMIN_CHAT_IDS`
 - `TELEGRAM_WEBHOOK_SECRET`
 - `TELEGRAM_WEBHOOK_URL`
+- 可选：`TELEGRAM_SETUP_SECRET`（管理接口密钥；未设置时复用 `TELEGRAM_WEBHOOK_SECRET`）
 
 生产环境使用 Wrangler Secret 配置这些值，不要提交到 Git。
 
@@ -105,15 +108,16 @@ pnpm --filter @live-support/worker exec wrangler deploy --dry-run --env producti
 3. 在群组设置中开启 **Forum Topics**。
 4. 将 Bot 加入群组，授予发送消息、读取消息以及创建、管理和关闭 Topic 所需的管理员权限。
 5. 在群组中发送一条消息。
-6. 在仓库根目录运行：
+6. 确认本地环境中可读取 `TELEGRAM_WEBHOOK_SECRET`（也可为管理接口单独设置可选的 `TELEGRAM_SETUP_SECRET`），并设置 Worker 地址（`WORKER_BASE_URL`、`VITE_WORKER_BASE_URL`，或命令行 `--url`）。
+7. 在仓库根目录运行：
 
    ```bash
-   pnpm telegram:doctor
+   pnpm telegram:setup
    ```
 
-7. 找到命令输出的 `TELEGRAM_CHAT_ID=-100...` 并复制。Worker 当前使用 `TELEGRAM_ADMIN_CHAT_IDS`，请将该 ID 写入此变量；多个 ID 使用英文逗号分隔。
+8. 在群组发送消息后，Worker 会缓存聊天信息。工具只显示 `supergroup + Forum Topics`；如果存在多个可用群组，会列出编号供选择，直接回车默认选择第一个。选择后会询问是否写入 `apps/worker/.dev.vars`，只有输入 `Y` 才会写入；其它输入只输出 `TELEGRAM_CHAT_ID`。
 
-该命令只读 Telegram 配置，不会修改 Bot、Webhook 或群组设置。
+该命令使用受 `TELEGRAM_SETUP_SECRET` 或 `TELEGRAM_WEBHOOK_SECRET` 保护的 Worker 管理接口，不调用 `getUpdates`，也不要求用户查看 Cloudflare 日志。
 
 ## 6. Cloudflare Pages
 
