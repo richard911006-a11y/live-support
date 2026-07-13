@@ -20,6 +20,7 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "doctor": "node scripts/run-ts.mjs scripts/doctor.ts",
+    "telegram:doctor": "node scripts/run-ts.mjs scripts/telegram-doctor.ts",
     "setup": "node scripts/run-ts.mjs scripts/setup.ts",
     "deploy": "node scripts/run-ts.mjs scripts/deploy.ts",
     "deploy:pages": "pnpm --filter @live-support/widget pages:deploy"

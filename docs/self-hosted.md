@@ -96,6 +96,25 @@ pnpm --filter @live-support/worker exec wrangler deploy --dry-run --env producti
 
 每个 Session 会绑定一个 Telegram Topic。浏览器刷新、WebSocket 重连或 Worker 重启不会重新创建 Topic；Session 超时后会关闭 Topic。
 
+## Telegram 快速配置
+
+首次部署时，请按以下步骤准备 Telegram 客服群组：
+
+1. 在 BotFather 创建 Bot，并保存 `TELEGRAM_BOT_TOKEN`。
+2. 创建 Telegram 群组并升级为 **Supergroup**。
+3. 在群组设置中开启 **Forum Topics**。
+4. 将 Bot 加入群组，授予发送消息、读取消息以及创建、管理和关闭 Topic 所需的管理员权限。
+5. 在群组中发送一条消息。
+6. 在仓库根目录运行：
+
+   ```bash
+   pnpm telegram:doctor
+   ```
+
+7. 找到命令输出的 `TELEGRAM_CHAT_ID=-100...` 并复制。Worker 当前使用 `TELEGRAM_ADMIN_CHAT_IDS`，请将该 ID 写入此变量；多个 ID 使用英文逗号分隔。
+
+该命令只读 Telegram 配置，不会修改 Bot、Webhook 或群组设置。
+
 ## 6. Cloudflare Pages
 
 Widget 可以独立部署到 Cloudflare Pages。Pages 不会自动代理 Worker 的 `/ws`，因此跨域部署时必须配置构建环境变量：
