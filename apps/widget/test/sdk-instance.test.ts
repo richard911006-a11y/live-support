@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ChatWidgetHandle } from '../src/sdk-types';
+import { installGlobalApi } from '../src/global-api';
 
 const state = vi.hoisted(() => ({
   handle: undefined as ChatWidgetHandle | undefined,
@@ -110,5 +111,22 @@ describe('LiveSupport instance', () => {
 
     second.open();
     expect(state.handle?.open).toHaveBeenCalledTimes(1);
+  });
+
+  it('exposes window controls and queues actions before initialization', () => {
+    const windowObject = {} as Window;
+    vi.stubGlobal('window', windowObject);
+    installGlobalApi();
+
+    windowObject.LiveSupport?.open();
+    const support = LiveSupport.init();
+
+    expect(state.handle?.open).toHaveBeenCalledTimes(1);
+    windowObject.LiveSupport?.close();
+    windowObject.LiveSupport?.toggle();
+    expect(state.handle?.close).toHaveBeenCalledTimes(1);
+    expect(state.handle?.toggle).toHaveBeenCalledTimes(1);
+
+    support.destroy();
   });
 });

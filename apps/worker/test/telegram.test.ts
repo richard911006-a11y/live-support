@@ -26,14 +26,14 @@ function createEnv(adminChatIds = '100,200'): Env {
 }
 
 describe('Telegram integration', () => {
-  it('creates stable website-based topic names without random titles', () => {
+  it('creates stable visitor-number topic names without website metadata', () => {
     const name = formatTopicName({
       visitorId: 'visitor-a' as VisitorId,
       website: 'shop.example',
       connectionTime: 1,
     });
 
-    expect(name).toMatch(/^shop\.example｜visitor-\d{4}$/u);
+    expect(name).toBe('#4962');
   });
 
   it('formats customer messages using the support notification template', () => {
@@ -202,12 +202,7 @@ describe('Telegram integration', () => {
     expect(
       new Set([...firstTopics, ...secondTopics].map((topic) => topic.messageThreadId)).size,
     ).toBe(4);
-    expect(createdNames).toEqual([
-      expect.stringMatching(/^shop-a\.example｜visitor-\d{4}$/u),
-      expect.stringMatching(/^shop-a\.example｜visitor-\d{4}$/u),
-      expect.stringMatching(/^shop-b\.example｜visitor-\d{4}$/u),
-      expect.stringMatching(/^shop-b\.example｜visitor-\d{4}$/u),
-    ]);
+    expect(createdNames).toEqual(['#4962', '#4962', '#4963', '#4963']);
 
     const firstTopic = firstTopics[0];
     if (firstTopic === undefined) {

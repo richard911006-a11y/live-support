@@ -1,8 +1,11 @@
 import { createRoot } from 'react-dom/client';
-import { createElement } from 'react';
+import { flushSync } from 'react-dom';
+import { createElement, createRef } from 'react';
 
 import { ChatWidget, type ChatWidgetProps } from './ChatWidget';
+import { installGlobalApi, registerWidgetHandle } from './global-api';
 import { LiveSupport } from './sdk';
+import type { ChatWidgetHandle } from './sdk-types';
 export { ImageUploadError, uploadImage, type ImageUploadOptions } from '@live-support/utils';
 
 export { ChatWidget } from './ChatWidget';
@@ -16,13 +19,26 @@ export type {
   SupportEventName,
   SupportEventPayloadMap,
   Visitor,
+  LiveSupportWindowApi,
 } from './sdk-types';
 
 export function mountChatWidget(container: HTMLElement, props?: ChatWidgetProps): () => void {
   const root = createRoot(container);
-  root.render(createElement(ChatWidget, props ?? {}));
+  const widgetRef = createRef<ChatWidgetHandle>();
 
-  return () => root.unmount();
+  installGlobalApi();
+  flushSync(() => {
+    root.render(createElement(ChatWidget, { ...(props ?? {}), ref: widgetRef }));
+  });
+  const unregisterGlobalWidget =
+    widgetRef.current === null || widgetRef.current === undefined
+      ? () => undefined
+      : registerWidgetHandle(widgetRef.current);
+
+  return () => {
+    unregisterGlobalWidget();
+    root.unmount();
+  };
 }
 
 export const init = LiveSupport.init;

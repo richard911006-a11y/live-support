@@ -146,7 +146,7 @@ pnpm deploy
 
 ### Telegram Topics 多访客模式
 
-Worker 会为每个访客在每个管理员 Supergroup 中创建一个独立 Topic，名称默认为 `网站名称｜visitor-xxxx`；如果有访客昵称，则使用 `网站名称｜访客昵称`。访客的文字、图片、系统通知和客服回复都会进入该 Topic，避免多个访客消息混在同一个聊天窗口。
+Worker 会为每个访客在每个管理员 Supergroup 中创建一个独立 Topic，名称使用稳定的访客编号，例如 `#8223`。访客的文字、图片、系统通知和客服回复都会进入该 Topic，避免多个访客消息混在同一个聊天窗口。
 
 使用前必须满足：
 
@@ -211,6 +211,38 @@ document.getElementById('support')?.addEventListener('click', () => support.togg
 ```
 
 实例还提供 `isOpen()`、`destroy()`、`setVisitor()` 和 `getVisitor()`。可以使用 `support.on(event, callback)` 监听 `open`、`close`、`connected`、`disconnected`、`message`、`message:sent`、`message:received` 和 `error`，使用 `support.off(event, callback)` 取消监听。完整 API 见 [JavaScript SDK 文档](docs/sdk.md)。
+
+## Embed Mode
+
+需要在页面加载后立即显示聊天窗口时，可以启用 Embed Mode。Embed Mode 会自动打开窗口并隐藏默认的“联系客服”按钮。
+
+通过 URL 参数启用：
+
+```text
+https://xxxx.pages.dev/?embed=1
+```
+
+或者通过容器属性启用：
+
+```html
+<main
+  id="live-support-widget"
+  data-worker-base-url="https://your-worker.workers.dev"
+  data-embed="true"
+></main>
+```
+
+未设置 `embed=1` 或 `data-embed="true"` 时，页面行为保持原样，仍显示右下角浮动按钮。
+
+浏览器页面还会提供 `window.LiveSupport` 控制 API：
+
+```js
+window.LiveSupport.open();
+window.LiveSupport.close();
+window.LiveSupport.toggle();
+```
+
+如果调用发生在 Widget 初始化前，调用会暂存，并在 Widget 初始化完成后执行。
 
 ## Telegram Bot 配置
 

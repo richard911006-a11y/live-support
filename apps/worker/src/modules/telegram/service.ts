@@ -84,12 +84,7 @@ export function formatVisitorLabel(visitorId: VisitorId): string {
 
 /** Builds a stable, privacy-safe Telegram topic title for one Session. */
 export function formatTopicName(visitorInfo: VisitorInfo): string {
-  const website = sanitizeTopicPart(visitorInfo.website) ?? 'live-support';
-  const nickname =
-    sanitizeTopicPart(visitorInfo.nickname) ??
-    `visitor-${formatVisitorLabel(visitorInfo.visitorId).slice(1)}`;
-
-  return `${website}｜${nickname}`.slice(0, 128);
+  return formatVisitorLabel(visitorInfo.visitorId);
 }
 
 export function formatCustomerMessage(
@@ -676,12 +671,4 @@ function inferImageContentType(filePath: string): string | undefined {
         : extension === 'webp'
           ? 'image/webp'
           : undefined;
-}
-
-function sanitizeTopicPart(value: string | undefined): string | undefined {
-  const normalized = value
-    ?.replace(/[\r\n｜|]/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim();
-  return normalized === undefined || normalized.length === 0 ? undefined : normalized;
 }

@@ -55,6 +55,26 @@ unsubscribe();
 
 支持的事件为：`open`、`close`、`connected`、`disconnected`、`message`、`message:sent`、`message:received` 和 `error`。`message` 与 `message:received` 在收到 Worker 的文字或图片消息时触发；`message:sent` 在客户端成功写入 WebSocket 后触发。
 
+## Embed Mode
+
+演示页或嵌入页可以通过 `?embed=1` 自动打开窗口并隐藏浮动按钮：
+
+```text
+https://xxxx.pages.dev/?embed=1
+```
+
+也可以在容器上设置 `data-embed="true"`：
+
+```html
+<main
+  id="live-support-widget"
+  data-worker-base-url="https://your-worker.workers.dev"
+  data-embed="true"
+></main>
+```
+
+页面初始化后提供 `window.LiveSupport.open()`、`window.LiveSupport.close()` 和 `window.LiveSupport.toggle()`。初始化完成前调用这些方法时，操作会排队并在 Widget 挂载后执行。
+
 ## 传统挂载方式
 
 已有项目无需修改：

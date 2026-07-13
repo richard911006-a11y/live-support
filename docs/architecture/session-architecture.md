@@ -176,13 +176,13 @@ Telegram Topic 的生命周期从属于 Session：
 4. Session 结束时关闭 Topic。
 5. Topic 被删除或失效时，标记 Binding 无效并创建替代 Topic。
 
-Topic 名称默认使用网站和访客标识：
+Topic 名称使用稳定的访客编号：
 
 ```text
-商城A｜visitor-1234
+#8223
 ```
 
-如果存在访客昵称，则使用 `商城A｜访客昵称`。名称只用于客服识别，不包含手机号、IP、User-Agent 或其它隐私信息。
+名称只用于客服识别，不包含手机号、IP、User-Agent 或其它隐私信息。
 
 ### 首条消息
 

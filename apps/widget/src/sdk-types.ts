@@ -44,3 +44,15 @@ export interface ChatWidgetHandle {
   setVisitor(visitor: Visitor | undefined): void;
   getVisitor(): Visitor | undefined;
 }
+
+export interface LiveSupportWindowApi {
+  open(): void;
+  close(): void;
+  toggle(): void;
+}
+
+declare global {
+  interface Window {
+    LiveSupport?: LiveSupportWindowApi;
+  }
+}

@@ -4,6 +4,7 @@ import { createElement, createRef } from 'react';
 
 import type { ChatWidgetProps } from './ChatWidget';
 import { ChatWidget } from './ChatWidget';
+import { registerWidgetHandle } from './global-api';
 import type {
   ChatWidgetHandle,
   SupportEventCallback,
@@ -116,6 +117,10 @@ function createSupportInstance(options: LiveSupportOptions): SupportInstance {
   flushSync(() => {
     root.render(createElement(ChatWidget, { ...widgetProps, ref: widgetRef }));
   });
+  const unregisterGlobalWidget =
+    widgetRef.current === null || widgetRef.current === undefined
+      ? () => undefined
+      : registerWidgetHandle(widgetRef.current);
 
   return {
     open(): void {
@@ -140,6 +145,7 @@ function createSupportInstance(options: LiveSupportOptions): SupportInstance {
 
       destroyed = true;
       widgetRef.current?.close();
+      unregisterGlobalWidget();
       root.unmount();
       container.remove();
       events.clear();

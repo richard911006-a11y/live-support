@@ -6,7 +6,7 @@
 
 ## Telegram Topics 多访客模式
 
-每个访客会在每个管理员 Supergroup 中拥有独立的 Forum Topic，Topic 名称默认为 `网站名称｜visitor-xxxx`；如果存在访客昵称，则使用 `网站名称｜访客昵称`。首次连接时发送一次完整访客资料，后续文字和图片只发送到该 Topic，不重复发送网站、设备和浏览器信息。
+每个访客会在每个管理员 Supergroup 中拥有独立的 Forum Topic，Topic 名称使用稳定的访客编号，例如 `#8223`。首次连接时发送一次完整访客资料，后续文字和图片只发送到该 Topic，不重复发送网站、设备和浏览器信息。
 
 请先将管理员聊天升级为 Supergroup，开启 Forum Topics，并授予 Bot 创建、发送和关闭 Topic 以及读取群组消息的权限。客服在当前 Topic 内直接使用 Telegram“回复”即可转发文字或图片；`/info` 会在当前 Topic 中返回该访客的资料。
 
