@@ -97,10 +97,12 @@ describe('Telegram integration', () => {
 
   it('delivers each customer message to every configured administrator', async () => {
     const chatIds: string[] = [];
+    const messages: string[] = [];
     const service = new TelegramService(createEnv('100,200,100'), {
       fetchImplementation: async (_input, init) => {
-        const body = JSON.parse(String(init?.body)) as { chat_id: string };
+        const body = JSON.parse(String(init?.body)) as { chat_id: string; text: string };
         chatIds.push(body.chat_id);
+        messages.push(body.text);
         return new Response(
           JSON.stringify({ ok: true, result: { message_id: 1, chat: { id: 1, type: 'private' } } }),
           { status: 200 },
@@ -111,6 +113,9 @@ describe('Telegram integration', () => {
     await service.notifyCustomerMessage('visitor-123' as VisitorId, 'Hello');
 
     expect(chatIds).toEqual(['100', '200']);
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toContain('网站');
+    expect(messages[0]).toContain('访客消息');
   });
 
   it('does not throw when Telegram delivery fails after retrying', async () => {

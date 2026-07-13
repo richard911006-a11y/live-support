@@ -59,7 +59,7 @@ export async function uploadImage(
   form.append('file', file, filename);
 
   const endpoint = new URL(options.endpoint ?? '/images', options.baseUrl ?? defaultBaseUrl());
-  const upload = options.fetchImplementation ?? fetch;
+  const upload = options.fetchImplementation ?? globalThis.fetch.bind(globalThis);
   let lastError: unknown;
 
   for (let attempt = 0; attempt < MAX_UPLOAD_ATTEMPTS; attempt += 1) {

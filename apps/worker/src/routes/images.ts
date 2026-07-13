@@ -24,18 +24,36 @@ export const imageRoutes = new Hono<{ Bindings: Env }>()
       await next();
     }
 
-    if (origin !== undefined && allowedOrigins.includes(origin)) {
-      context.header('access-control-allow-origin', origin);
-      context.header('access-control-allow-methods', 'GET, POST, OPTIONS');
-      context.header('access-control-allow-headers', 'content-type');
-      context.header('vary', 'Origin');
-    }
+    applyCorsHeaders(context, origin, allowedOrigins);
 
     return context.res;
   })
   .post('/images', uploadImage)
   .post('/images/upload', uploadImage)
   .get('/images/*', getImage);
+
+function applyCorsHeaders(
+  context: Context<{ Bindings: Env }>,
+  origin: string | undefined,
+  allowedOrigins: string[],
+): void {
+  if (origin === undefined || !allowedOrigins.includes(origin)) {
+    return;
+  }
+
+  const response = context.res;
+  const headers = new Headers(response.headers);
+  headers.set('access-control-allow-origin', origin);
+  headers.set('access-control-allow-methods', 'GET, POST, OPTIONS');
+  headers.set('access-control-allow-headers', 'content-type');
+  headers.set('vary', 'Origin');
+
+  context.res = new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
 
 async function uploadImage(context: Context<{ Bindings: Env }>): Promise<Response> {
   try {

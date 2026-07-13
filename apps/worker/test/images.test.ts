@@ -134,6 +134,19 @@ describe('R2 image uploads', () => {
     }
   });
 
+  it('does not reflect an origin outside the configured allowlist', async () => {
+    const bucket = { put: async () => undefined };
+    const env = { ...createEnv(bucket), PUBLIC_WIDGET_ORIGINS: 'https://allowed.example' };
+    const response = await app.request(
+      '/images',
+      { method: 'POST', headers: { Origin: 'https://untrusted.example' }, body: new FormData() },
+      env,
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
   it('provides a reusable browser upload helper', async () => {
     const file = new Blob(['webp data'], { type: 'image/webp' });
     let requestBody: BodyInit | null | undefined;
